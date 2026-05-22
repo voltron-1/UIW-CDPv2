@@ -50,16 +50,12 @@ def analyze_alert_with_ai(raw_log_data):
             return response.json()["choices"][0]["message"]["content"]
         return "AI Analysis failed. Manual review required."
     except Exception as e:
-        return f"AI Integration Error: {e}"
-    
-            return response.json()['choices'][0]['message']['content']
-        else:
-            return "AI Analysis failed. Manual review required."
-    except Exception:
-        logger.exception("AI integration failed during alert analysis.")
+         return response.json()['choices'][0]['message']['content']
+    else:
         return "AI Analysis failed. Manual review required."
-main
-
+except Exception as e:
+    app.logger.error("AI integration failed during alert analysis: %s", e)
+    return "AI Analysis failed. Manual review required."
 
 # =============================================================================
 # 2. NOTIFICATION ENGINE — ntfy push
