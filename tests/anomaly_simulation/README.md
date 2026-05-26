@@ -41,6 +41,9 @@ pip install -r requirements.txt
 ## Usage
 
 ```bash
+# Gate every prereq before the live run (host bins, ES, agent, watcher, router):
+./preflight.sh
+
 # Run a single scenario:
 ./sim_portscan.sh
 ./sim_brute_ssh.sh
@@ -55,6 +58,9 @@ source .env && python3 verify_detections.py
 # End-to-end: run all sims, wait for indexing, then verify:
 ./run_all.sh
 ```
+
+The full live-lab procedure (with troubleshooting and evidence capture) is in
+[`docs/SOP-022-anomaly-validation.md`](../../docs/SOP-022-anomaly-validation.md).
 
 ## Exit codes
 
