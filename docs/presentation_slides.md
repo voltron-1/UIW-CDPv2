@@ -63,6 +63,17 @@ This document contains the finalized content for the Suburban-SOC project presen
 
 ---
 
+### Slide 4.5: Kibana Data Views Architecture
+
+**Associated Concept:** Data Organization & Triage
+
+*   **Objective:** Structure incoming data into distinct indices so analysts can quickly pivot between raw telemetry, triggered alerts, and automated actions.
+*   **`logstash-*` (The Data Lake):** Contains all raw telemetry flowing into the pipeline (Zeek network data, Filebeat/Sysmon endpoint logs). This powers all four primary SOC Dashboards.
+*   **`.alerts-security.alerts-*` (SIEM Alerts):** Managed by the Elastic Security App. Contains only high-severity alerts generated when detection rules (like Sigma rules) find malicious patterns in the Data Lake.
+*   **`soar-actions-*` (Automated Response Log):** The audit trail for the SOAR pipeline. Logs every automated action taken (like quarantining a MAC address) for MTTD tracking and accountability.
+
+---
+
 ### Slide 5: SOAR Response Layer — Automated Quarantine
 
 ![Slide 5 SOAR](C:/Users/tjlam/.gemini/antigravity-ide/brain/8fdd09d8-3374-46a8-9374-b1b5f9bed6ce/slide_5_soar_1779894082139.png)
