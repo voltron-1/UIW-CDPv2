@@ -402,6 +402,13 @@ ip addr show eth0 | grep 'inet '
 3. Name: `Suburban SOC` | Index pattern: `logstash-*` | Timestamp: `@timestamp`
 4. Click **Save data view to default space**
 
+### Step 19.5: Understanding the SOC Data Views (Index Patterns)
+
+In this SOC architecture, three distinct Data Views serve different operational roles:
+1. **`logstash-*` (The Data Lake):** Contains all raw telemetry (network, endpoint, auth). It powers the real-time Kibana dashboards and is used for deep-dive threat hunting.
+2. **`.alerts-security.alerts-*` (SIEM Alerts):** A curated index managed by Elastic Security. It contains only high-fidelity alerts generated when Detection Rules (like Sigma rules) match against raw telemetry.
+3. **`soar-actions-*` (Automated Response Log):** The audit trail for the AI Agent. It tracks automated quarantine actions (e.g., isolating a host's MAC address) to measure Mean-Time-To-Respond (MTTD).
+
 ### Step 20: Confirm Data in Kibana Discover
 
 1. Hamburger menu → **Discover**
