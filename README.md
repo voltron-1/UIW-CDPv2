@@ -87,6 +87,42 @@ To guarantee operational integrity and data security, 5 design invariants are en
 3. **Human-of-Record Invariant:** Autonomous containment authority is explicitly out of scope. Every mitigation action requires explicit human authorization by a Student Analyst.
 4. **Single-Source-of-Truth:** The centralized OpenSearch cluster serves as the absolute authoritative log index.
 5. **Written-Authorization Required:** No offensive emulation script shall be executed against UIW infrastructure without an active, signed Rules of Engagement (RoE) document.
+6. **Framework-Traceability-Required:** No detection rule or SOP is merged without NIST CSF 2.0 and MITRE ATT&CK metadata, so every artifact traces upward to the governance layer.
+
+---
+
+## 🧭 Strategic Framework Architecture
+
+The platform is governed by a four-framework model. Governance sets *what good
+looks like*; SOC-CMM measures *how mature we are*; MITRE ATT&CK measures *how
+much of the adversary we can see*. Every repo artifact traces upward to at least
+one CSF 2.0 Function and, where applicable, an ISO 27001:2022 Annex A control.
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                 NIST CSF 2.0 / ISO 27001                    │
+│      (High-Level Strategy, Governance, & Compliance)        │
+└──────────────┬───────────────────────────────┬──────────────┘
+               │                               │
+               ▼                               ▼
+┌──────────────────────────────┐┌─────────────────────────────┐
+│          SOC-CMM             ││       MITRE ATT&CK          │
+│   (Operational Maturity,     ││   (Detection Engineering,   │
+│   People, & Processes)       ││    Threat Hunter Mapping)   │
+└──────────────────────────────┘└─────────────────────────────┘
+```
+
+This is delivered as a cross-cutting **Framework Alignment** milestone (four
+workstreams, WS-A…WS-D) that overlays the PI roadmap. The full plan, gap
+analysis, and Definition of Done live in
+[`docs/internal documents/UIW_Strategic_Framework_Alignment_Plan.md`](docs/internal%20documents/UIW_Strategic_Framework_Alignment_Plan.md).
+
+| Workstream | Framework layer | Core deliverables |
+|---|---|---|
+| **WS-A** | NIST CSF 2.0 / ISO 27001 | Governance pack, CSF 2.0 Profile (adds **Govern**), ISO 27001 Annex A SoA |
+| **WS-B** | SOC-CMM | Scored maturity baseline, roles/RACI, metrics catalog, re-assessment cadence |
+| **WS-C** | MITRE ATT&CK | Navigator layer (generated), telemetry-aware coverage scorecard, detection lifecycle/QA |
+| **WS-D** | Traceability | Master CSF↔ISO↔SOC-CMM↔ATT&CK matrix + CI enforcement |
 
 ---
 
@@ -111,15 +147,26 @@ To ensure delivery of the core platform for the Capstone, the following are expl
 │   ├── /logstash               # OpenSearch ingestion pipelines
 │   ├── /opensearch             # Index templates and cluster settings
 │   └── /server                 # OpenSearch Dashboard NDJSON exports
+├── /governance                 # Governance & compliance layer (WS-A/B/D)
+│   ├── exclusion_list.txt      # SOAR permanent allowlist (single source of truth)
+│   ├── /policies               # Lab security policies (CSF 2.0 / ISO 27001)
+│   ├── /soc-cmm                # SOC-CMM maturity assessment & improvement backlog
+│   ├── nist-csf-2.0-profile.md # CSF 2.0 Current/Target Profile (6 functions)
+│   ├── iso27001-annexA-mapping.md   # ISO 27001:2022 Annex A control mapping
+│   └── traceability-matrix.md  # CSF ↔ ISO ↔ SOC-CMM ↔ ATT&CK ↔ artifact
 ├── /docs                       # Technical documentation
 │   ├── /legacy                 # Legacy Suburban-SOC archive
-│   ├── /internal documents     # Architecture and program definitions
+│   ├── /internal documents     # Architecture, program & framework-alignment plans
+│   ├── /detections             # ATT&CK coverage scorecard, lifecycle, hunt hypotheses
+│   ├── /operations             # Roles/RACI, metrics catalog, SOC ops guides
 │   └── /playbooks              # Adversary-in-a-Box automation playbooks
 ├── /evidence                   # Pipeline proof, validation logs, and Kibana screenshots
 ├── /reports                    # Compliance Agent outputs and coverage reports
 ├── /rules                      # Sigma detection engineering repository
+│   ├── /sigma                  # Sigma source rules (ATT&CK-tagged)
+│   └── /attack                 # Generated ATT&CK Navigator coverage layer
 ├── /scripts                    # Automation, SOAR agents, and setup scripts
-│   ├── /agile                  # GitHub CLI board management scripts
+│   ├── /agile                  # GitHub CLI board management + framework-alignment scripts
 │   └── /setup                  # Infrastructure provisioning
 │       ├── /ai_agent           # Python MAS agents (Response, Threat Hunter, CTI, Compliance)
 │       └── docker-compose.yml  # Centralized SIEM + MAS stack definition

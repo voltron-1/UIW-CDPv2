@@ -1,5 +1,13 @@
 # MITRE ATT&CK Coverage Matrix
 
+> **Framework Alignment (WS-C):** This table is the human-readable view of the
+> platform's ATT&CK coverage. Under the Strategic Framework Alignment Plan it is
+> **regenerated** from `rules/sigma/` tags alongside a machine-readable ATT&CK
+> Navigator layer (`rules/attack/navigator-layer.json`) and a telemetry-aware
+> coverage scorecard (`docs/detections/coverage-scorecard.md`). Do not hand-edit
+> once the generator (`scripts/setup/generate_attack_layer.py`) lands — edit the
+> rule tags instead. See `docs/internal documents/UIW_Strategic_Framework_Alignment_Plan.md`.
+
 | Tactic / Technique | Detection Rules |
 |-------------------|-----------------|
 | **credential_access** | LSASS Memory Dump via Comsvcs.dll |
