@@ -1,0 +1,10 @@
+# Keep the build context clean and reproducible (and avoid the broken
+# .venv/bin/python symlink that breaks `docker build`).
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+# Runtime state — must never be baked into the image.
+approval_queue.jsonl
+*.log

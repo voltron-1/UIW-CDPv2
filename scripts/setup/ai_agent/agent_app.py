@@ -3,10 +3,13 @@ import re
 import json
 import time
 import uuid
+import hmac
+import hashlib
+import ipaddress
 import threading
 import requests
-import subprocess
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from flask import Flask, request, jsonify
 
@@ -17,15 +20,40 @@ app = Flask(__name__)
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
-NTFY_TOPIC         = os.environ.get("NTFY_TOPIC",         "uiw_lab_soc_alerts_tjlam_99")
-# CDP §4 invariant: telemetry stays on campus. Default to a LOCAL Ollama model.
-# A hosted model may only be used when LLM_ALLOW_HOSTED=true, and even then the
-# prompt is sanitised first (see sanitize_for_llm).
-LLM_API_KEY        = os.environ.get("LLM_API_KEY",        "ollama")
-LLM_API_URL        = os.environ.get("LLM_API_URL",        "http://localhost:11434/v1/chat/completions")
-LLM_MODEL          = os.environ.get("LLM_MODEL",          "llama3.1")
+# Secrets/config come from the environment (set in scripts/setup/.env, passed
+# through by docker-compose). No real secret is hardcoded as a default (WS0.4):
+# unset secrets degrade gracefully (notifications skipped, AI triage falls back).
+NTFY_TOPIC         = os.environ.get("NTFY_TOPIC",         "")
+LLM_API_KEY        = os.environ.get("LLM_API_KEY",        "")
+LLM_API_URL        = os.environ.get("LLM_API_URL",        "https://api.openai.com/v1/chat/completions")
+LLM_MODEL          = os.environ.get("LLM_MODEL",          "gpt-4")
+# CDP §4 egress control: only send (sanitised) telemetry to a HOSTED LLM endpoint
+# when explicitly allowed. Default false → with the hosted default URL the agent
+# degrades gracefully ("AI Analysis skipped") instead of leaking or crashing.
+# (analyze_alert_with_ai referenced this but it was never defined — NameError 500
+# on every /alert; the dead SOAR trigger + the pre-#109 crash-loop hid it.)
 LLM_ALLOW_HOSTED   = os.environ.get("LLM_ALLOW_HOSTED",   "false").lower() == "true"
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+# WS2.3: Kibana Cases — every /alert becomes a tracked case (state/owner/timeline),
+# tenant-scoped to the alert's Kibana space, with the AI summary + SOAR action
+# attached and closeable with a disposition. Needs a Kibana user holding the
+# generalCases feature privilege (provisioned as `soc_agent` by docker-compose setup).
+# Unset creds degrade gracefully — case tracking is skipped, /alert still works.
+KIBANA_URL         = os.environ.get("KIBANA_URL",         "http://kibana:5601")
+KIBANA_AGENT_USER  = os.environ.get("KIBANA_AGENT_USER",  "")
+KIBANA_AGENT_PASS  = os.environ.get("KIBANA_AGENT_PASS",  "")
+CASES_OWNER        = "cases"  # generic Stack Cases (generalCases feature)
+# Elasticsearch endpoint for the SOAR feedback loop (Executive Dashboard metrics).
+# Defaults to the Docker-network service name used by docker-compose.yml.
+# Security is enabled (WS0.1): connect over HTTPS with a least-privilege user and
+# verify TLS against the stack CA.
+ES_HOST            = os.environ.get("ES_HOST",            "https://elasticsearch:9200")
+ES_USER            = os.environ.get("ES_USER",            "logstash_internal")
+ES_PASS            = os.environ.get("ES_PASS",            "")
+ES_CA              = os.environ.get("ES_CA",              "/certs/ca/ca.crt")
+# requests `verify` arg: path to the CA bundle if present, else fall back to False
+# (self-signed cert on the internal docker network). Never disable for public ES.
+ES_VERIFY          = ES_CA if (ES_CA and Path(ES_CA).is_file()) else False
 
 # CDP §12.3: autonomous containment is Deferred Scope. The agent DRAFTS a
 # response; a human executes it. Set AUTONOMOUS_ISOLATION=true only to restore
@@ -33,10 +61,23 @@ DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 AUTONOMOUS_ISOLATION = os.environ.get("AUTONOMOUS_ISOLATION", "false").lower() == "true"
 
 # CDP §12.4: permanent exclusion list — assets the SOAR may never isolate.
-EXCLUSION_LIST = os.environ.get(
-    "EXCLUSION_LIST",
-    str((Path(__file__).resolve().parents[3] / "governance" / "exclusion_list.txt")),
-)
+def _default_exclusion_path() -> str:
+    """Locate governance/exclusion_list.txt by walking up from this file.
+
+    A fixed parents[N] breaks across layouts: in the repo this file lives at
+    scripts/setup/ai_agent/, but in the container it is /app/agent_app.py (only two
+    parents) — parents[3] raised IndexError at import and crash-looped the agent.
+    Walking the parents finds it in both, and falls back to the container mount path.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / "governance" / "exclusion_list.txt"
+        if candidate.is_file():
+            return str(candidate)
+    return "/governance/exclusion_list.txt"
+
+
+EXCLUSION_LIST = os.environ.get("EXCLUSION_LIST") or _default_exclusion_path()
 
 # Human-approval queue (pending isolation actions awaiting a human-of-record).
 APPROVAL_QUEUE = os.environ.get(
@@ -45,9 +86,124 @@ APPROVAL_QUEUE = os.environ.get(
 )
 _queue_lock = threading.Lock()
 
-# Absolute path to isolate.sh — resolved at import time so subprocess.run works
-# regardless of Flask's current working directory.
-ISOLATE_SCRIPT = str((Path(__file__).resolve().parent.parent / "isolate.sh"))
+# Hive-Mind broker — the router-block dispatcher (#109). The agent runs in a slim
+# container with no ssh/sudo, so it can't run isolate.sh against a router itself.
+# Instead it routes containment to the broker over an authenticated (HMAC) webhook;
+# the broker owns the per-tenant router inventory and executes the block.
+BROKER_URL    = os.environ.get("BROKER_URL", "http://hive_mind_broker:8000")
+# Shared secret for signing broker requests — MUST equal the broker's
+# HIVE_MIND_SECRET. If unset, _execute_isolation fails closed (never dispatches).
+HIVE_MIND_SECRET = os.environ.get("HIVE_MIND_SECRET", "").encode("utf-8")
+
+# --- Webhook authentication (WS0.2) ------------------------------------------
+# /alert triggers device isolation, so it MUST be authenticated. Callers sign the
+# raw request body with HMAC-SHA256 and send it in the `x-elastic-signature`
+# header as "sha256=<hexdigest>" (same scheme as the hive-mind-broker). The shared
+# secret comes from the SOC_AGENT_HMAC_SECRET env var — if it is unset the endpoint
+# fails CLOSED (503), never open.
+HMAC_HEADER = "x-elastic-signature"
+HMAC_SECRET = os.environ.get("SOC_AGENT_HMAC_SECRET", "").encode("utf-8")
+
+# Validation patterns for anything that reaches the broker / response path.
+_MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
+
+
+def verify_signature(raw_body: bytes, signature_header: str | None) -> bool:
+    """Constant-time HMAC-SHA256 verification of the raw request body."""
+    if not HMAC_SECRET:
+        app.logger.critical("SOC_AGENT_HMAC_SECRET is not set — refusing all /alert requests.")
+        return False
+    if not signature_header:
+        return False
+    expected = "sha256=" + hmac.new(HMAC_SECRET, raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature_header)
+
+
+def is_valid_mac(value: str) -> bool:
+    return bool(value) and bool(_MAC_RE.match(value))
+
+
+def is_valid_ip(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except ValueError:
+        return False
+
+
+# --- WS0.3: per-tenant response & notification resolution --------------------
+_TENANT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,38}$")
+
+
+def safe_tenant(value) -> str:
+    """Return a validated lowercase tenant slug, or 'unassigned' if invalid."""
+    v = str(value or "").strip().lower()
+    return v if _TENANT_RE.match(v) else "unassigned"
+
+
+def _tenant_env_suffix(tenant: str) -> str:
+    """home-smith -> HOME_SMITH (env-var suffix)."""
+    return tenant.upper().replace("-", "_")
+
+
+def dispatch_block_via_broker(attacker_ip: str, tenant: str, source_mac: str = ""):
+    """Route an approved containment to the hive-mind-broker (#109).
+
+    The agent's slim container has no ssh/sudo, so it cannot run isolate.sh against
+    a router. The broker can: it owns the per-tenant router inventory and applies an
+    nftables drop. We sign the request with HIVE_MIND_SECRET (same HMAC scheme as
+    /alert) and POST it to the broker's authenticated /webhook/dispatch — which
+    executes immediately because the agent already performed the §12.3 approval gate.
+
+    Fails CLOSED: with no secret configured we never dispatch. Returns (ok, detail).
+    """
+    if not HIVE_MIND_SECRET:
+        return False, "HIVE_MIND_SECRET unset — refusing to dispatch (broker unreachable/unsigned)"
+    body = json.dumps({
+        "attacker_ip": attacker_ip,
+        "tenant_id":   tenant,
+        "source_mac":  source_mac,
+        "approver":    "soc-ai-agent",
+    }).encode("utf-8")
+    sig = "sha256=" + hmac.new(HIVE_MIND_SECRET, body, hashlib.sha256).hexdigest()
+    try:
+        resp = requests.post(
+            f"{BROKER_URL}/webhook/dispatch",
+            data=body,
+            headers={"Content-Type": "application/json", HMAC_HEADER: sig},
+            timeout=15,
+        )
+    except Exception as exc:  # noqa: BLE001 - never let response handling crash
+        app.logger.error("broker dispatch failed: %s", exc)
+        return False, f"broker unreachable: {exc}"
+
+    detail = resp.text[:300]
+    try:
+        data = resp.json()
+        detail = data.get("message", detail)
+    except Exception:
+        data = {}
+    # The block actually happened only if the broker reached >=1 router.
+    ok = resp.status_code == 200 and bool(data.get("executed")) and data.get("success_count", 0) >= 1
+    return ok, detail
+
+
+def ntfy_topic_for(tenant: str) -> str:
+    """Per-tenant ntfy topic (NTFY_TOPIC_<TENANT>), else the global NTFY_TOPIC."""
+    if tenant != "unassigned":
+        topic = os.environ.get(f"NTFY_TOPIC_{_tenant_env_suffix(tenant)}")
+        if topic:
+            return topic
+    return NTFY_TOPIC
+
+
+def discord_webhook_for(tenant: str) -> str:
+    """Per-tenant Discord webhook, else the global DISCORD_WEBHOOK_URL."""
+    if tenant != "unassigned":
+        url = os.environ.get(f"DISCORD_WEBHOOK_URL_{_tenant_env_suffix(tenant)}")
+        if url:
+            return url
+    return DISCORD_WEBHOOK_URL
 
 
 # =============================================================================
@@ -114,7 +270,10 @@ def sanitize_for_llm(text: str) -> str:
 
 
 def _is_hosted_endpoint(url: str) -> bool:
-    return not re.search(r"(localhost|127\.0\.0\.1|ollama|::1)", url or "")
+    # host.docker.internal is the Docker host gateway — i.e. a LOCAL Ollama running
+    # on the same physical machine (the docker-compose default). Treat it as
+    # on-campus, otherwise AI triage is wrongly skipped as "hosted egress".
+    return not re.search(r"(localhost|127\.0\.0\.1|::1|ollama|host\.docker\.internal)", url or "")
 
 
 # =============================================================================
@@ -169,9 +328,13 @@ def analyze_alert_with_ai(raw_log_data):
 # =============================================================================
 # 2. NOTIFICATION ENGINE — ntfy push
 # =============================================================================
-def send_soc_alert(title, message, priority=3, tags="rotating_light"):
-    """Pushes formatted alerts to the analyst's mobile device via ntfy."""
-    url = f"https://ntfy.sh/{NTFY_TOPIC}"
+def send_soc_alert(title, message, priority=3, tags="rotating_light", tenant="unassigned"):
+    """Push formatted alerts to the analyst via ntfy, on the tenant's topic (WS0.3)."""
+    topic = ntfy_topic_for(tenant)
+    if not topic:
+        app.logger.warning("No ntfy topic for tenant '%s' — skipping ntfy push.", tenant)
+        return
+    url = f"https://ntfy.sh/{topic}"
     headers = {
         "Title":    title,
         "Priority": str(priority),
@@ -186,13 +349,14 @@ def send_soc_alert(title, message, priority=3, tags="rotating_light"):
 # =============================================================================
 # 3. DISCORD NOTIFICATION — SOC channel alert
 # =============================================================================
-def send_discord_alert(device_ip: str, device_mac: str, ai_summary: str):
+def send_discord_alert(device_ip: str, device_mac: str, ai_summary: str, tenant: str = "unassigned"):
     """
-    Posts a rich quarantine notification to the SOC Discord channel.
-    Requires DISCORD_WEBHOOK_URL environment variable to be set.
+    Posts a rich quarantine notification to the SOC Discord channel, on the
+    tenant's webhook (WS0.3), falling back to the global DISCORD_WEBHOOK_URL.
     """
-    if not DISCORD_WEBHOOK_URL:
-        app.logger.warning("DISCORD_WEBHOOK_URL not set — skipping Discord notification.")
+    webhook = discord_webhook_for(tenant)
+    if not webhook:
+        app.logger.warning("No Discord webhook for tenant '%s' — skipping notification.", tenant)
         return
 
     payload = {
@@ -209,7 +373,7 @@ def send_discord_alert(device_ip: str, device_mac: str, ai_summary: str):
         }]
     }
     try:
-        requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
+        requests.post(webhook, json=payload, timeout=10)
     except Exception as e:
         app.logger.error("Discord notification failed: %s", e)
 
@@ -225,22 +389,198 @@ def _append_pending_action(action: dict) -> None:
 
 
 def _read_queue():
+    """Read every action from the append-only approval queue (oldest first).
+
+    A missing queue file simply means nothing has been drafted yet.
+    """
+    actions = []
     try:
         with open(APPROVAL_QUEUE, "r", encoding="utf-8") as fh:
-            return [json.loads(line) for line in fh if line.strip()]
-    except OSError:
-        return []
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    actions.append(json.loads(line))
+                except json.JSONDecodeError:
+                    app.logger.warning("Skipping malformed approval-queue line.")
+    except FileNotFoundError:
+        pass
+    return actions
 
 
-def _execute_isolation(target_mac: str, target_ip: str):
-    """Actually run isolate.sh. Re-checks the exclusion list at execution time."""
-    blocked = is_excluded(ip=target_ip, mac=target_mac)
-    if blocked:
-        app.logger.error("Refusing isolation: %s is on the exclusion list.", blocked)
-        return False, f"BLOCKED by exclusion list ({blocked})"
-    target = target_mac if target_mac else target_ip
-    proc = subprocess.run(["sudo", ISOLATE_SCRIPT, target], check=False)
-    return proc.returncode == 0, f"isolate.sh exited {proc.returncode}"
+# =============================================================================
+# 3c. ISOLATION EXECUTION — only ever reached after a guard (flag or approval)
+# =============================================================================
+def _execute_isolation(mac: str, ip: str = "", tenant: str = "unassigned"):
+    """Quarantine an attacker by routing the block through the hive-mind-broker (#109).
+
+    The agent runs in a slim container with no ssh/sudo, so it can't isolate a router
+    directly; the broker does it. The broker blocks by IP (nftables drop), so a usable
+    source IP is required — `mac` is carried along only for the audit trail.
+
+    The §12.4 exclusion list is re-checked here (defence in depth) so neither the
+    autonomous path nor a human approval can ever quarantine protected infra. WS0.3
+    tenant scoping (which routers get the block) is enforced by the broker from its
+    own per-tenant inventory; a NAMED tenant with no router yields a clean refusal
+    rather than touching another tenant's router.
+    """
+    excluded = is_excluded(mac=mac, ip=ip)
+    if excluded:
+        return False, f"{excluded} is on the permanent exclusion list — refused"
+    if not is_valid_ip(ip):
+        return False, (f"no valid IP to block (got {ip!r}); the broker blocks by IP — "
+                       f"manual action required")
+    return dispatch_block_via_broker(ip, tenant, source_mac=mac)
+
+
+# =============================================================================
+# 3.5 SOAR FEEDBACK LOOP — index response actions back to Elasticsearch
+# =============================================================================
+def log_soar_action(action_type, target_ip, target_mac, ai_summary, severity,
+                    tenant="unassigned", latency_seconds=None):
+    """Index a SOAR response action to Elasticsearch for the Executive dashboard.
+
+    Writes to a per-tenant soar-actions-<tenant> data stream (WS0.3 + WS0.5),
+    matching the soar-actions-* data view and the per-tenant role grant. Retention
+    is enforced by the soar-actions-ilm policy (365d evidence window). Failures are
+    logged but never raised — dashboard telemetry must not break alert handling.
+    `response.automated` is True only for actually-executed actions. WS2.4:
+    `response.latency_seconds` (time from /alert receipt to action) feeds the MTTR SLO.
+    """
+    doc = {
+        "@timestamp":         datetime.now(timezone.utc).isoformat(),
+        "tenant.id":          tenant,
+        "action.type":        action_type,
+        "source.ip":          target_ip,
+        "source.mac":         target_mac or "N/A",
+        "ai.summary":         ai_summary,
+        "event.severity":     severity,
+        "response.automated": action_type not in ("analyst_review", "drafted"),
+    }
+    if latency_seconds is not None:
+        doc["response.latency_seconds"] = round(float(latency_seconds), 3)
+    # WS0.5: target the per-tenant data stream (no date suffix — ILM rollover owns
+    # time). Data streams only accept op_type=create, so use the _bulk create form;
+    # ES auto-creates the stream from the soar-actions-* data_stream template.
+    data_stream = f"soar-actions-{tenant}"
+    ndjson = '{"create":{}}\n' + json.dumps(doc) + "\n"
+    try:
+        requests.post(
+            f"{ES_HOST}/{data_stream}/_bulk",
+            data=ndjson,
+            headers={"Content-Type": "application/x-ndjson"},
+            auth=(ES_USER, ES_PASS),
+            verify=ES_VERIFY,
+            timeout=5,
+        )
+    except Exception as e:
+        app.logger.error("Failed to index SOAR action: %s", e)
+
+
+# =============================================================================
+# 3.6 ALERT TRIAGE & CASE TRACKING — Kibana Cases (WS2.3)
+# =============================================================================
+def _kibana_base(tenant: str) -> str:
+    """Kibana base URL for the tenant's space (WS0.3). 'unassigned' -> default space."""
+    if tenant and tenant != "unassigned":
+        return f"{KIBANA_URL}/s/{tenant}"
+    return KIBANA_URL
+
+
+def _cases_enabled() -> bool:
+    return bool(KIBANA_AGENT_USER and KIBANA_AGENT_PASS)
+
+
+def _kibana(method, path, tenant, **kw):
+    return requests.request(
+        method, f"{_kibana_base(tenant)}{path}",
+        headers={"kbn-xsrf": "true", "Content-Type": "application/json"},
+        auth=(KIBANA_AGENT_USER, KIBANA_AGENT_PASS), timeout=8, **kw)
+
+
+def create_case(tenant, severity, ai_summary, source_ip, source_mac, extra_tags=None):
+    """Open a Kibana case for an alert (tenant-scoped). Returns case id, or None.
+
+    Fail-safe: case tracking never breaks alert handling — failures are logged.
+    """
+    if not _cases_enabled():
+        return None
+    body = {
+        "title": f"[{str(severity).upper()}] SOC alert — {source_ip or source_mac or 'unknown'} ({tenant})",
+        "description": ("**Auto-opened by the Suburban-SOC AI agent.**\n\n"
+                        f"- Tenant: `{tenant}`\n- Severity: `{severity}`\n"
+                        f"- Source IP: `{source_ip}`\n- Source MAC: `{source_mac or 'N/A'}`\n\n"
+                        f"**AI triage**\n\n{ai_summary}"),
+        "tags": ["suburban-soc", str(tenant), str(severity)] + list(extra_tags or []),
+        "connector": {"id": "none", "name": "none", "type": ".none", "fields": None},
+        "settings": {"syncAlerts": False},
+        "owner": CASES_OWNER,
+    }
+    try:
+        r = _kibana("POST", "/api/cases", tenant, json=body)
+        if r.status_code == 200:
+            return r.json().get("id")
+        app.logger.error("Kibana case create -> HTTP %s: %s", r.status_code, r.text[:200])
+    except Exception as e:  # noqa: BLE001 - case tracking must never crash /alert
+        app.logger.error("Kibana case create failed: %s", e)
+    return None
+
+
+def add_case_comment(tenant, case_id, comment):
+    """Append a timeline comment (the SOAR decision/action) to a case."""
+    if not (_cases_enabled() and case_id):
+        return
+    try:
+        _kibana("POST", f"/api/cases/{case_id}/comments", tenant,
+                json={"type": "user", "comment": comment, "owner": CASES_OWNER})
+    except Exception as e:  # noqa: BLE001
+        app.logger.error("Kibana case comment failed: %s", e)
+
+
+def close_case(tenant, case_id, disposition):
+    """Close a case with a disposition (recorded as a tag + a closing comment)."""
+    if not (_cases_enabled() and case_id):
+        return
+    try:
+        cur = _kibana("GET", f"/api/cases/{case_id}", tenant).json()
+        tags = list(dict.fromkeys((cur.get("tags") or []) + [f"disposition:{disposition}"]))
+        _kibana("PATCH", "/api/cases", tenant, json={"cases": [{
+            "id": case_id, "version": cur.get("version"),
+            "status": "closed", "tags": tags}]})
+        add_case_comment(tenant, case_id, f"Closed — disposition: **{disposition}**.")
+    except Exception as e:  # noqa: BLE001
+        app.logger.error("Kibana case close failed: %s", e)
+
+
+# =============================================================================
+# 3.7 TAMPER-EVIDENT AUDIT TRAIL — append-only record of privileged actions (WS3.3)
+# =============================================================================
+def write_audit(action, actor, tenant, outcome="", target="", detail=""):
+    """Append a tamper-evident audit record (who/what/when/tenant) to soc-audit-<tenant>.
+
+    The agent's ES account holds the append-only `soc_audit_appender` role (create
+    privilege only — no update/delete), so it can ADD audit records but never modify
+    or remove them. Every quarantine/response decision is recorded. Failures are
+    logged, never raised — auditing must not break alert handling.
+    """
+    doc = {
+        "@timestamp":    datetime.now(timezone.utc).isoformat(),
+        "event.action":  action,
+        "actor":         actor,
+        "tenant.id":     tenant,
+        "event.outcome": outcome,
+        "target":        target,
+        "detail":        detail,
+    }
+    # op_type=create (append-only) via the bulk create form.
+    ndjson = '{"create":{}}\n' + json.dumps(doc) + "\n"
+    try:
+        requests.post(f"{ES_HOST}/soc-audit-{tenant}/_bulk", data=ndjson,
+                      headers={"Content-Type": "application/x-ndjson"},
+                      auth=(ES_USER, ES_PASS), verify=ES_VERIFY, timeout=5)
+    except Exception as e:  # noqa: BLE001
+        app.logger.error("Failed to write audit record: %s", e)
 
 
 # =============================================================================
@@ -248,97 +588,140 @@ def _execute_isolation(target_mac: str, target_ip: str):
 # =============================================================================
 @app.route("/alert", methods=["POST"])
 def handle_kibana_webhook():
-    """Receives Kibana alert payload and orchestrates AI triage + a DRAFTED response.
+    """Receives a signed alert payload and orchestrates AI triage + response."""
+    # Step 0: authenticate the request BEFORE doing anything else. The raw body is
+    # what was signed, so verify it before parsing.
+    raw_body = request.get_data()
+    if not verify_signature(raw_body, request.headers.get(HMAC_HEADER)):
+        app.logger.warning("Rejected /alert: missing or invalid HMAC signature.")
+        return jsonify({"status": "unauthorized"}), 401
+    _t0 = time.time()  # WS2.4: automated-response latency (-> MTTR SLO)
 
-    Per CDP §12.3, the agent never autonomously isolates: it triages, drafts a
-    recommended containment action, and enqueues it for a human-of-record to
-    approve via POST /approve. (Legacy auto-execute is gated behind
-    AUTONOMOUS_ISOLATION=true and still honours the exclusion list.)
-    """
-    data        = request.json or {}
+    data = request.get_json(silent=True) or {}
     severity    = data.get("severity",   "medium")
-    target_ip   = data.get("source_ip",  "unknown")
-    target_mac  = data.get("source_mac", "")
+    target_ip   = str(data.get("source_ip",  "")).strip()
+    target_mac  = str(data.get("source_mac", "")).strip()
     raw_details = data.get("raw_log",    "No log data provided")
+
+    # Validate anything that feeds the response path. Invalid values are blanked
+    # (never passed through) so the broker only ever sees a clean MAC/IP.
+    valid_mac = target_mac if is_valid_mac(target_mac) else ""
+    safe_ip   = target_ip if is_valid_ip(target_ip) else "unknown"
+    tenant    = safe_tenant(data.get("tenant_id"))  # WS0.3: scopes response + notify
 
     # Step 1: AI triage
     ai_summary = analyze_alert_with_ai(raw_details)
 
-    if severity != "critical":
-        send_soc_alert(
-            title="MEDIUM: Analyst Review Requested",
-            message=(
-                f"Suspicious Activity from {target_ip}\n\n"
-                f"AI Analysis:\n{ai_summary}\n\n"
-                "Review required for isolation."
-            ),
-            priority=3,
-            tags="warning,mag,robot",
-        )
-        return jsonify({"status": "Alert Processed", "ai_analysis": ai_summary}), 200
+    # WS2.3: open a tracked Kibana case for this alert (tenant-scoped). The SOAR
+    # decision is appended as a timeline comment in each branch below; /approve and
+    # the autonomous/excluded paths close it with a disposition.
+    case_id = create_case(tenant, severity, ai_summary, safe_ip, valid_mac)
 
-    # --- Critical path ---
-    # §12.4: if the target is protected infrastructure, never even draft a block.
+    # Step 2 — §12.4: never act on protected infrastructure, not even to draft.
+    # Checked first so neither the autonomous path nor a draft can target it.
     excluded = is_excluded(ip=target_ip, mac=target_mac)
     if excluded:
-        app.logger.warning("Critical alert targets excluded asset %s — no action drafted.", excluded)
+        app.logger.warning("Alert targets excluded asset %s — no action taken.", excluded)
         send_soc_alert(
-            title="CRITICAL: Alert on PROTECTED asset — no action",
+            title=f"{severity.upper()}: Alert on PROTECTED asset — no action",
             message=(
-                f"Alert targets {excluded}, which is on the permanent exclusion list.\n"
-                f"NO isolation drafted. Investigate manually.\n\nAI Analysis:\n{ai_summary}"
+                f"Alert targets {excluded}, on the permanent exclusion list.\n"
+                f"No isolation taken or drafted. Investigate manually.\n\n"
+                f"AI Analysis:\n{ai_summary}"
             ),
             priority=5,
             tags="shield,warning,robot",
+            tenant=tenant,
         )
+        log_soar_action("analyst_review", safe_ip, valid_mac, ai_summary, severity, tenant=tenant, latency_seconds=time.time() - _t0)
+        add_case_comment(tenant, case_id,
+                         f"§12.4: alert targets PROTECTED asset `{excluded}` — no action taken.")
+        close_case(tenant, case_id, "no_action_protected_asset")
+        write_audit("alert_excluded_asset", "soc-ai-agent", tenant,
+                    outcome="no_action", target=str(excluded), detail=f"case={case_id}")
         return jsonify({
-            "status": "Blocked by exclusion list",
-            "excluded": excluded,
+            "status": "no_action_protected_asset",
+            "asset": excluded,
             "ai_analysis": ai_summary,
+            "case_id": case_id,
         }), 200
 
-    if AUTONOMOUS_ISOLATION:
-        # Legacy, out-of-scope behaviour — retained only behind an explicit flag.
-        ok, detail = _execute_isolation(target_mac, target_ip)
+    # Step 3 — §12.3: autonomous containment is OFF by default (it is destructive
+    # and irreversible without a human). We auto-execute ONLY when an operator has
+    # explicitly opted in (AUTONOMOUS_ISOLATION=true) AND the alert is critical
+    # with a format-validated MAC. Every other case is drafted for human approval.
+    if AUTONOMOUS_ISOLATION and severity == "critical" and valid_mac:
+        ok, detail = _execute_isolation(valid_mac, safe_ip, tenant)
         send_soc_alert(
-            title="CRITICAL: Autonomous Isolation (flag enabled)",
-            message=f"IP: {target_ip} | MAC: {target_mac or 'N/A'}\n{detail}\n\nAI Analysis:\n{ai_summary}",
+            title="CRITICAL: Autonomous Isolation" if ok else "CRITICAL: Auto-isolation FAILED",
+            message=(
+                f"{'NODE ISOLATED' if ok else 'ISOLATION FAILED'}\n"
+                f"IP: {safe_ip} | MAC: {valid_mac}\nDetail: {detail}\n\n"
+                f"AI Analysis:\n{ai_summary}"
+            ),
             priority=5,
-            tags="skull,lock,robot",
+            tags="skull,lock,robot" if ok else "warning,lock,robot",
+            tenant=tenant,
         )
-        return jsonify({"status": "Auto-isolated", "detail": detail, "ai_analysis": ai_summary}), 200
+        send_discord_alert(device_ip=safe_ip, device_mac=valid_mac, ai_summary=ai_summary, tenant=tenant)
+        log_soar_action(
+            "quarantine_mac" if ok else "analyst_review",
+            safe_ip, valid_mac, ai_summary, severity, tenant=tenant,
+            latency_seconds=time.time() - _t0,
+        )
+        add_case_comment(tenant, case_id,
+                         f"Autonomous isolation {'SUCCEEDED' if ok else 'FAILED'} for "
+                         f"`{safe_ip}` / `{valid_mac}` — {detail}")
+        if ok:
+            close_case(tenant, case_id, "true_positive_contained")
+        write_audit("autonomous_isolation", "soc-ai-agent", tenant,
+                    outcome="executed" if ok else "failed", target=safe_ip, detail=detail)
+        return jsonify({
+            "status": "auto_isolated" if ok else "isolation_failed",
+            "detail": detail,
+            "ai_analysis": ai_summary,
+            "case_id": case_id,
+        }), (200 if ok else 200)
 
-    # Default: DRAFT the action and queue it for human approval.
+    # Step 4 — default: DRAFT the action and queue it for a human-of-record, who
+    # executes it via POST /approve. Medium alerts and critical alerts without a
+    # valid MAC also land here (review-only).
     action = {
-        "id":        uuid.uuid4().hex[:12],
-        "ts":        time.time(),
-        "status":    "pending",
-        "severity":  severity,
-        "target_ip": target_ip,
-        "target_mac": target_mac,
+        "id":         uuid.uuid4().hex[:12],
+        "ts":         time.time(),
+        "status":     "pending",
+        "severity":   severity,
+        "tenant":     tenant,
+        "target_ip":  safe_ip,
+        "target_mac": valid_mac,
         "ai_summary": ai_summary,
-        "recommended_action": "isolate (MAC)" if target_mac else "isolate (IP)",
+        "recommended_action": "isolate (MAC)" if valid_mac else "review (no valid MAC)",
+        "case_id": case_id,
     }
     _append_pending_action(action)
-
+    add_case_comment(tenant, case_id,
+                     f"Response DRAFTED ({action['recommended_action']}) — awaiting human "
+                     f"approval via POST /approve (id={action['id']}).")
+    write_audit("response_drafted", "soc-ai-agent", tenant, outcome="pending_approval",
+                target=safe_ip or valid_mac, detail=f"action={action['id']}")
     send_soc_alert(
-        title="CRITICAL: Isolation AWAITING APPROVAL",
+        title=f"{severity.upper()}: Response DRAFTED — approval required",
         message=(
-            f"DRAFTED (not executed). Approve to isolate.\n"
-            f"Action ID: {action['id']}\nIP: {target_ip} | MAC: {target_mac or 'N/A'}\n\n"
-            f"AI Analysis:\n{ai_summary}\n\n"
-            f"Approve: POST /approve {{\"id\": \"{action['id']}\"}}"
+            f"Drafted: {action['recommended_action']} for {safe_ip or valid_mac or 'unknown'}.\n"
+            f"Approve via POST /approve (id={action['id']}).\n\n"
+            f"AI Analysis:\n{ai_summary}"
         ),
-        priority=5,
-        tags="hourglass,lock,robot",
+        priority=5 if severity == "critical" else 3,
+        tags="memo,hourglass,robot",
+        tenant=tenant,
     )
-    send_discord_alert(
-        device_ip=target_ip,
-        device_mac=target_mac or "N/A",
-        ai_summary=f"[AWAITING HUMAN APPROVAL — action {action['id']}] {ai_summary}",
-    )
-
-    return jsonify({"status": "Pending approval", "action_id": action["id"], "ai_analysis": ai_summary}), 202
+    log_soar_action("analyst_review", safe_ip, valid_mac, ai_summary, severity, tenant=tenant, latency_seconds=time.time() - _t0)
+    return jsonify({
+        "status": "drafted",
+        "action_id": action["id"],
+        "ai_analysis": ai_summary,
+        "case_id": case_id,
+    }), 200
 
 
 # =============================================================================
@@ -368,7 +751,15 @@ def approve_action():
     if not action:
         return jsonify({"error": f"no pending action {action_id}"}), 404
 
-    ok, detail = _execute_isolation(action.get("target_mac", ""), action.get("target_ip", ""))
+    _t0 = time.time()
+    action_tenant = safe_tenant(action.get("tenant"))
+    ok, detail = _execute_isolation(
+        action.get("target_mac", ""), action.get("target_ip", ""), action_tenant)
+    log_soar_action(
+        "quarantine_mac" if ok else "analyst_review",
+        action.get("target_ip", "unknown"), action.get("target_mac", ""),
+        action.get("ai_summary", ""), action.get("severity", "medium"), tenant=action_tenant,
+        latency_seconds=time.time() - _t0)
     _append_pending_action({
         "id": action_id,
         "ts": time.time(),
@@ -376,8 +767,18 @@ def approve_action():
         "approver": approver,
         "result": detail,
     })
+    # WS2.3: record the human decision on the case and close it with a disposition.
+    case_id = action.get("case_id")
+    add_case_comment(action_tenant, case_id,
+                     f"Approved by **{approver}** → isolation {'executed' if ok else 'FAILED'}: {detail}")
+    if ok:
+        close_case(action_tenant, case_id, "true_positive_contained")
+    write_audit("response_approved", approver, action_tenant,
+                outcome="executed" if ok else "failed",
+                target=action.get("target_ip", ""), detail=f"action={action_id}; {detail}")
     code = 200 if ok else 422
-    return jsonify({"status": "executed" if ok else "blocked", "detail": detail, "approver": approver}), code
+    return jsonify({"status": "executed" if ok else "blocked", "detail": detail,
+                    "approver": approver, "case_id": case_id}), code
 
 
 # =============================================================================
