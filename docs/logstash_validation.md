@@ -1,5 +1,12 @@
 # Logstash Pipeline Validation & Edge Cases
 
+> **⚠️ Security posture note (issue #107).** The deployed stack runs with
+> `xpack.security.enabled=true` (HTTPS + auth + mTLS). Ignore any guidance below
+> that assumes security is disabled or that removes `user`/`password` from the
+> Logstash output — the pipeline authenticates to Elasticsearch over HTTPS and the
+> output block keeps its credentials. Re-validate against the current
+> `configs/logstash.conf` (the pipeline was reworked — see issue #99).
+
 To ensure the SOC pipeline won't crash when it encounters abnormal network traffic, I performed a syntax analysis and ran the newly written `logstash.conf` against Elastic's validation engine. 
 
 **Syntax Test Result**: `Config Validation Result: OK` 
