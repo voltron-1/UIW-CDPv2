@@ -1,12 +1,15 @@
+# ============================== Filebeat inputs ===============================
+# Server/host Zeek integration — identical contract to configs/network/filebeat.yml.
+# Ships RAW Zeek JSON lines (no ndjson parser — see issue #99) tagged network_logs.
+# Consolidation of the duplicate Filebeat configs is tracked in issue #124.
 filebeat.inputs:
-- type: filestream
-  id: my-zeek-logs
-  enabled: true
-  paths:
-    # Tell Filebeat exactly where the Zeek logs are
-    - /storage/PCAP/zeek_logs/*.log
+  - type: filestream
+    id: zeek-logs
+    enabled: true
+    paths:
+      - /storage/PCAP/zeek_logs/*.log
+    tags: ["network_logs"]
 
-# ------------------------------ Logstash Output -------------------------------
+# ============================== Logstash Output ===============================
 output.logstash:
-  # Remove the hashtag to enable this, and put in your Logstash IP address
-  hosts: ["localhost:5044"]
+  hosts: ["${LOGSTASH_HOST:localhost:5044}"]
