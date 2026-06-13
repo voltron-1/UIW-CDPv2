@@ -45,6 +45,33 @@ Continuously validate platform effectiveness.
 * Detection validation workflows.
 * Coverage reporting.
 
+#### Objective 5: Strategic Framework Alignment
+Govern the platform under a four-framework model so every artifact traces to a
+defined standard.
+**Success Metrics:**
+* NIST CSF 2.0 Current/Target Profile published across all 6 functions (incl. Govern).
+* ISO 27001:2022 Annex A controls mapped to repo evidence.
+* SOC-CMM maturity baseline scored across all 5 domains.
+* MITRE ATT&CK coverage measured (telemetry-aware), not just tagged.
+* Master traceability matrix (CSF ↔ ISO ↔ SOC-CMM ↔ ATT&CK ↔ artifact) generated.
+
+### Strategic Framework Architecture
+
+A governance layer (NIST CSF 2.0 / ISO 27001) drives two operational pillars —
+SOC-CMM (operational maturity, people & process) and MITRE ATT&CK (detection
+engineering). Delivered as a cross-cutting **Framework Alignment** milestone with
+four workstreams that overlay the PI roadmap:
+
+| Workstream | Layer | Supports PI |
+|---|---|---|
+| **WS-A** Governance & Compliance | NIST CSF 2.0 / ISO 27001 | PI-1 |
+| **WS-B** SOC-CMM Operational Maturity | SOC-CMM | PI-1, PI-6 |
+| **WS-C** ATT&CK Detection Engineering | MITRE ATT&CK | PI-3, PI-4 |
+| **WS-D** Cross-Framework Traceability | All | PI-7 |
+
+> Full plan, gap analysis, sequencing, and Definition of Done:
+> `docs/internal documents/UIW_Strategic_Framework_Alignment_Plan.md`.
+
 ### Program Increment Roadmap
 
 #### Program Increment 1: Foundation Assessment

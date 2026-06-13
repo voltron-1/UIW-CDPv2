@@ -47,6 +47,28 @@ All main administrative scripts are currently located in the `setup/` subdirecto
 * **`clear_logs.sh`**: 
   Quickly purges and cleans existing Zeek logs in the `/storage/PCAP/zeek_logs/` directory to prevent disk bloat or to reset the environment.
 
+### Agile / Project Board (`agile/`)
+
+GitHub CLI scripts that provision milestones, labels, and issues on
+`voltron-1/UIW-Cyber-Defence-Platform` and sync the project board. Require an
+authenticated `gh` (scopes: `repo`, `project`, `workflow`).
+
+* **`setup_milestones.sh`** / **`setup_labels.sh`** / **`create_pi_issues.sh`**:
+  Provision the PI-1…PI-7 program-increment milestones, labels, and issues.
+
+**Strategic Framework Alignment** (NIST CSF 2.0 / ISO 27001 / SOC-CMM / ATT&CK) —
+run in order:
+
+1. **`setup_framework_labels.sh`** — adds the `FW-A…FW-D` workstream labels and
+   the `type: framework` label.
+2. **`setup_framework_milestone.sh`** — creates the cross-cutting *Framework
+   Alignment* milestone (idempotent).
+3. **`create_framework_issues.sh`** — creates the 4 workstream epics + 15 tasks,
+   adds each to the *UIW Cyber Defence Platform* board (project #6), and sets
+   **Status = Backlog**.
+
+> Backing plan: [`docs/internal documents/UIW_Strategic_Framework_Alignment_Plan.md`](../docs/internal%20documents/UIW_Strategic_Framework_Alignment_Plan.md).
+
 ## Usage
 
 To use any of these components, ensure you have the appropriate permissions (root/sudo) and have made the script executable:

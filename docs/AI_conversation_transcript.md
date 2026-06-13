@@ -111,7 +111,7 @@ Since the live router environment isn't fully connected here with all credential
 I initialized the AI Agent's virtual environment and executed the CISO report pipeline. Because Elasticsearch wasn't fully reachable in this immediate session, it successfully fell back to the demo validation mode to compile the MTTD and NIST metrics, and proceeded to generate the PDF and trigger the alerts:
 
 ```bash
-tjlam@WSL:~/projects/UIW_SOC/scripts/setup/ai_agent$ source .venv/bin/activate
+tjlam@WSL:~/projects/UIW-Cyber-Defence-Platform/scripts/setup/ai_agent$ source .venv/bin/activate
 (.venv) tjlam@WSL:.../ai_agent$ python3 weekly_ciso_report.py
 
 [INFO] POST https://localhost:9200/.alerts-security.alerts-*/_search [status:N/A duration:0.000s]
