@@ -42,9 +42,9 @@ The project transitions the legacy single-host MVP architecture into an operatio
 |---|---|---|---|
 | **PI-1: Foundation** | Audit legacy architecture, infrastructure baseline hardening | @cryptgrphy | In Progress |
 | **PI-2: Platform** | Migrate to OpenSearch cluster, standardize pipelines | @voltron-1 | Not Started |
-| **PI-3: Detection** | Validate Sigma rules, map to MITRE ATT&CK dashboard | @sterlinggarnett | Not Started |
-| **PI-4: Adversary** | Automate Adversary-in-a-Box validation playbooks | @voltron-1 | Not Started |
-| **PI-5: SOAR Core** | Provision containerized Python MAS & Ollama infrastructure | @voltron-1 | Not Started |
+| **PI-3: Detection** | Validate Sigma rules, map to MITRE ATT&CK dashboard | @sterlinggarnett | In Progress |
+| **PI-4: Adversary** | Automate Adversary-in-a-Box validation playbooks | @voltron-1 | In Progress |
+| **PI-5: SOAR Core** | Provision containerized Python MAS & Ollama infrastructure | @voltron-1 | In Progress (Response + Compliance agents) |
 | **PI-6: Operations** | Develop Student Analyst Ops Guides and Training Labs | @cryptgrphy | Not Started |
 | **PI-7: Capstone** | Execute end-to-end operational sequence demo | All Hands | Not Started |
 
@@ -52,24 +52,33 @@ The project transitions the legacy single-host MVP architecture into an operatio
 
 ## 🏗️ Technical Architecture
 
-The platform leverages an entirely open-source, containerized microservices architecture:
+> **⚠️ Current vs Target (read this first).** This repository **currently** implements
+> a hardened **ELK 9.3.2 (Elasticsearch / Kibana / Logstash) + Zeek** stack with a
+> single Flask-based SOAR agent. The **OpenSearch** migration, **Suricata**,
+> **Wazuh**, local **Ollama**, and the full **4-agent MAS** are the **target
+> architecture (roadmap)** — see PI-2 / PI-5 above. The `Status` column below tags
+> each component so the design intent and the shipped reality are not confused.
 
-| Component | Technology | Ecosystem Role |
-|---|---|---|
-| **Infrastructure Base** | Ubuntu Linux | Hardened logical nodes serving as the isolated laboratory baseline environment. |
-| **Central Index & SIEM** | OpenSearch Cluster | Single source of truth for telemetry ingestion, field parsing, correlation indexing. |
-| **Visualization Plane** | OpenSearch Dashboards | Unified analyst monitoring workspace, metrics reporting, visual threat hunting. |
-| **Network Telemetry** | Suricata NIDS | Passive network intrusion detection listening on core switch SPAN port. |
-| **Host Telemetry** | Wazuh HIDS | Endpoint monitoring forwarding logs directly into the OpenSearch pipeline. |
-| **AI Execution Engine** | Ollama | Localized LLM engine running on university hardware to prevent data leakage. |
-| **SOAR Framework** | Custom Python MAS | Multi-Agent System executing alert enrichment, OSINT parsing, and triage. |
-| **Emulation Engine** | Adversary-in-a-Box | Localized automation platform mimicking real-world threat behaviors. |
+| Component | Target Technology | Status | Ecosystem Role |
+|---|---|---|---|
+| **Infrastructure Base** | Ubuntu Linux | **Current** | Hardened logical nodes serving as the isolated laboratory baseline environment. |
+| **Central Index & SIEM** | OpenSearch Cluster | **Roadmap (PI-2)** — currently **Elasticsearch 9.3.2** | Single source of truth for telemetry ingestion, field parsing, correlation indexing. |
+| **Visualization Plane** | OpenSearch Dashboards | **Roadmap (PI-2)** — currently **Kibana 9.3.2** | Unified analyst monitoring workspace, metrics reporting, visual threat hunting. |
+| **Network Telemetry** | Suricata NIDS | **Roadmap** — currently **Zeek** (OpenWrt SPAN capture) | Passive network intrusion detection. |
+| **Host Telemetry** | Wazuh HIDS | **Roadmap** — interim: **Sysmon + Winlogbeat** (see `docs/SOP-002-endpoint-telemetry.md`) | Endpoint process/host telemetry into the pipeline. |
+| **AI Execution Engine** | Ollama (local) | **Partial** — SOAR defaults to local Ollama; hosted egress is gated | Localized LLM engine to keep telemetry on campus. |
+| **SOAR Framework** | Custom Python MAS (4 agents) | **Partial** — **Response + Compliance** built; Threat Hunter / CTI / Agent Bus are **roadmap (PI-5)** | Multi-Agent alert enrichment, triage, reporting. |
+| **Emulation Engine** | Adversary-in-a-Box | **Current** — local sim scripts (`tests/anomaly_simulation/`) | Emulates real-world threat behaviors. |
 
 ---
 
 ## 🧠 The Multi-Agent System (MAS)
 
-The automated orchestration layer consists of four specialized Python agents executing via an internal Agent Communication Bus:
+The automated orchestration layer is **designed** for four specialized Python agents
+executing via an internal Agent Communication Bus. **Current status:** the **Response
+Agent** (`scripts/setup/ai_agent/agent_app.py`) and the **Compliance Agent**
+(`scripts/setup/ai_agent/weekly_ciso_report.py`) are implemented; the **Threat Hunter
+Agent**, **CTI Agent**, and the **Agent Communication Bus** are **roadmap (PI-5)**.
 
 1. **Response Agent (SOAR Core):** Ingests automated OpenSearch alerts via webhooks, compiles incident briefings, and structures prescriptive containment blueprints for human approval.
 2. **Threat Hunter Agent:** Executes a continuous 15-minute scheduled cadence querying OpenSearch indices for behavioral anomalies and low-and-slow patterns.
@@ -124,6 +133,12 @@ analysis, and Definition of Done live in
 | **WS-C** | MITRE ATT&CK | Navigator layer (generated), telemetry-aware coverage scorecard, detection lifecycle/QA |
 | **WS-D** | Traceability | Master CSF↔ISO↔SOC-CMM↔ATT&CK matrix + CI enforcement |
 
+> **Status (planned).** This Framework Alignment layer is a **roadmap deliverable**,
+> not yet shipped. Today the repo contains `governance/exclusion_list.txt` only; the
+> governance pack, CSF 2.0 profile, ISO 27001 Annex A SoA, SOC-CMM baseline, ATT&CK
+> Navigator layer, and traceability matrix are tracked in issue #103. The CSF 2.0
+> **Govern** function is wired into the CISO report (`weekly_ciso_report.py`).
+
 ---
 
 ## 🚫 Deferred Scope
@@ -144,31 +159,34 @@ To ensure delivery of the core platform for the Capstone, the following are expl
 ├── README.md                   # You are here
 ├── LICENSE                     # MIT License
 ├── /configs                    # Core component configurations
-│   ├── /logstash               # OpenSearch ingestion pipelines
-│   ├── /opensearch             # Index templates and cluster settings
-│   └── /server                 # OpenSearch Dashboard NDJSON exports
+│   ├── logstash.conf           # Logstash pipeline (mirror of the deployed copy)
+│   ├── /network, /server       # filebeat.yml / winlogbeat.yml + Kibana NDJSON exports
+│   ├── /zeek, /intel           # Zeek sensor + threat-intel config
+│   └── /opensearch             # (planned) OpenSearch index templates — PI-2
 ├── /governance                 # Governance & compliance layer (WS-A/B/D)
 │   ├── exclusion_list.txt      # SOAR permanent allowlist (single source of truth)
-│   ├── /policies               # Lab security policies (CSF 2.0 / ISO 27001)
-│   ├── /soc-cmm                # SOC-CMM maturity assessment & improvement backlog
-│   ├── nist-csf-2.0-profile.md # CSF 2.0 Current/Target Profile (6 functions)
-│   ├── iso27001-annexA-mapping.md   # ISO 27001:2022 Annex A control mapping
-│   └── traceability-matrix.md  # CSF ↔ ISO ↔ SOC-CMM ↔ ATT&CK ↔ artifact
+│   ├── /policies               # (planned) Lab security policies — WS-A
+│   ├── /soc-cmm                # (planned) SOC-CMM maturity assessment — WS-B
+│   ├── nist-csf-2.0-profile.md # (planned) CSF 2.0 Current/Target Profile — WS-A
+│   ├── iso27001-annexA-mapping.md   # (planned) ISO 27001:2022 Annex A mapping — WS-A
+│   └── traceability-matrix.md  # (planned) CSF ↔ ISO ↔ SOC-CMM ↔ ATT&CK — WS-D
 ├── /docs                       # Technical documentation
 │   ├── /legacy                 # Legacy Suburban-SOC archive
 │   ├── /internal documents     # Architecture, program & framework-alignment plans
-│   ├── /detections             # ATT&CK coverage scorecard, lifecycle, hunt hypotheses
-│   ├── /operations             # Roles/RACI, metrics catalog, SOC ops guides
-│   └── /playbooks              # Adversary-in-a-Box automation playbooks
+│   ├── /detections             # SIEM KQL docs ( + (planned) ATT&CK scorecard — WS-C )
+│   ├── /operations             # (planned) Roles/RACI, metrics catalog — WS-B
+│   └── /playbooks              # Incident-response playbooks
 ├── /evidence                   # Pipeline proof, validation logs, and Kibana screenshots
 ├── /reports                    # Compliance Agent outputs and coverage reports
 ├── /rules                      # Sigma detection engineering repository
 │   ├── /sigma                  # Sigma source rules (ATT&CK-tagged)
-│   └── /attack                 # Generated ATT&CK Navigator coverage layer
+│   ├── /elastic_watcher        # Generated Elastic detection-rule NDJSON
+│   └── /attack                 # (planned) ATT&CK Navigator coverage layer — WS-C
 ├── /scripts                    # Automation, SOAR agents, and setup scripts
-│   ├── /agile                  # GitHub CLI board management + framework-alignment scripts
+│   ├── /agile                  # GitHub CLI board management scripts
+│   ├── /hive-mind-broker       # Experimental IP-block SOAR broker (not integrated — issue #109)
 │   └── /setup                  # Infrastructure provisioning
-│       ├── /ai_agent           # Python MAS agents (Response, Threat Hunter, CTI, Compliance)
+│       ├── /ai_agent           # SOAR agents (Response=agent_app.py, Compliance=weekly_ciso_report.py)
 │       └── docker-compose.yml  # Centralized SIEM + MAS stack definition
 └── /tests                      # Unit tests for Logstash pipelines and Agent Bus
 \`\`\`
