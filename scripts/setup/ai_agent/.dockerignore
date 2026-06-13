@@ -8,3 +8,10 @@ __pycache__/
 # Runtime state — must never be baked into the image.
 approval_queue.jsonl
 *.log
+# Secrets / TLS material — must never be baked into the image (Dockerfile COPY . .).
+.env
+.env.*
+*.key
+*.crt
+*.pem
+certs/

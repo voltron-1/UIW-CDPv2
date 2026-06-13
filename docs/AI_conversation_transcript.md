@@ -191,7 +191,7 @@ Please review the **Open Questions** section regarding the format you prefer for
 
 <USER_REQUEST>
 Username: elastic
-Password: SuburbanSOC2026!
+Password: [REDACTED — rotated; see scripts/setup/.env]
 dont need to make another dashboard
 </USER_REQUEST>
 <ADDITIONAL_METADATA>
