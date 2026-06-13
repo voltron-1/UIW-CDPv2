@@ -45,6 +45,11 @@ services:
       - ELASTICSEARCH_USERNAME=kibana_system
       - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD:?KIBANA_PASSWORD must be set in .env}
       - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=/usr/share/kibana/config/certs/ca/ca.crt
+      # Required for Kibana Cases / Actions (WS2.3). Without an encryption key the
+      # Cases API returns HTTP 500 ("Encrypted Saved Objects plugin is missing
+      # encryption key"). Must be a STABLE >=32-char secret (set in .env) — rotating
+      # it invalidates previously-encrypted saved objects.
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=${KIBANA_ENCRYPTION_KEY:?KIBANA_ENCRYPTION_KEY must be set in .env}
     ports:
       - 5601:5601
     volumes:
@@ -62,8 +67,12 @@ services:
     environment:
       - LS_JAVA_OPTS=-Xms512m -Xmx512m
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set in .env}
+      # ntfy topic for CRITICAL_THREAT push alerts — never commit a real topic.
+      - NTFY_TOPIC=${NTFY_TOPIC:?NTFY_TOPIC must be set in .env}
     volumes:
       - ./configs/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+      # Managed malicious-IP indicator list (hot-reloaded; no IOCs hardcoded in the pipeline).
+      - ./configs/logstash/threat_intel.yml:/usr/share/logstash/config/threat_intel.yml:ro
       - ./certs:/usr/share/logstash/config/certs:ro
     networks:
       - soc-mesh-net
@@ -82,6 +91,15 @@ services:
       - LLM_ALLOW_HOSTED=${LLM_ALLOW_HOSTED:-false}
       - AUTONOMOUS_ISOLATION=${AUTONOMOUS_ISOLATION:-false}
       - EXCLUSION_LIST=/governance/exclusion_list.txt
+      # ntfy topic for SOAR alerts — shared with the Logstash pipeline; set in .env.
+      - NTFY_TOPIC=${NTFY_TOPIC:?NTFY_TOPIC must be set in .env}
+      # Shared HMAC secret for the authenticated /alert webhook. Without it the
+      # agent refuses all /alert requests (fail-closed). Set in .env.
+      - SOC_AGENT_HMAC_SECRET=${SOC_AGENT_HMAC_SECRET:?SOC_AGENT_HMAC_SECRET must be set in .env}
+      # Kibana Cases (WS2.3): least-privilege user (provision with ./provision_soc_agent.sh).
+      # If unset, case tracking is skipped and /alert still works.
+      - KIBANA_AGENT_USER=${KIBANA_AGENT_USER:-}
+      - KIBANA_AGENT_PASS=${KIBANA_AGENT_PASS:-}
     volumes:
       - ../../governance:/governance:ro
     networks:
