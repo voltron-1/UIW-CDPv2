@@ -1,0 +1,8 @@
+# Managed malicious-IP indicator list for the Logstash threat-detection stage.
+# Format:  "<ip>": "<reason / source>"
+# A match on source.ip or destination.ip tags the event CRITICAL_THREAT.
+# Logstash hot-reloads this file every 5 min (refresh_interval => 300), so
+# analysts curate indicators here without editing or restarting the pipeline.
+# Keep this list authoritative; do NOT hardcode IOCs back into logstash.conf.
+"185.150.115.115": "known-malicious — migrated from legacy inline pipeline rule"
+"207.46.134.94": "known-malicious — Suburban-SOC intel feed (see configs/intel/intel.dat)"
