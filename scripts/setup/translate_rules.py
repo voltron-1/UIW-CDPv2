@@ -4,8 +4,8 @@ import yaml
 import json
 from pathlib import Path
 
-RULES_DIR = Path("/home/tjlam/projects/UIW-Cyber-Defence-Platform/rules/sigma")
-OUTPUT_DIR = Path("/home/tjlam/projects/UIW-Cyber-Defence-Platform/rules/elastic_watcher")
+RULES_DIR = Path("/home/tjlam/projects/UIW-CDPv2/rules/sigma")
+OUTPUT_DIR = Path("/home/tjlam/projects/UIW-CDPv2/rules/elastic_watcher")
 
 REQUIRED_FIELDS = ['title', 'id', 'status', 'logsource', 'detection']
 
@@ -85,7 +85,7 @@ def main():
             print(f"  - {title}")
 
     # Output markdown matrix
-    matrix_md_path = Path("/home/tjlam/projects/UIW-Cyber-Defence-Platform/docs/attack_matrix.md")
+    matrix_md_path = Path("/home/tjlam/projects/UIW-CDPv2/docs/attack_matrix.md")
     matrix_md_path.parent.mkdir(parents=True, exist_ok=True)
     with open(matrix_md_path, 'w') as f:
         f.write("# MITRE ATT&CK Coverage Matrix\n\n")

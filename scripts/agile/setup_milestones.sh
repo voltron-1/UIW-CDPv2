@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
 # UIW Cyber Defence Platform — GitHub Milestone Setup
-# Repo: voltron-1/UIW-Cyber-Defence-Platform
+# Repo: voltron-1/UIW-CDPv2
 # =============================================================================
 set -euo pipefail
 
-REPO="voltron-1/UIW-Cyber-Defence-Platform"
+REPO="voltron-1/UIW-CDPv2"
 
 echo ""
 echo "=== Step 1: Rename Milestone #1 to PI-1: Foundation Assessment ==="

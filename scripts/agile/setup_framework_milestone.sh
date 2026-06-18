@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # UIW Cyber Defence Platform — Strategic Framework Alignment: Milestone Setup
-# Repo: voltron-1/UIW-Cyber-Defence-Platform
+# Repo: voltron-1/UIW-CDPv2
 #
 # Creates the cross-cutting "Framework Alignment" milestone that tracks the
 # four workstreams (WS-A..WS-D) defined in
@@ -12,7 +12,7 @@
 # =============================================================================
 set -euo pipefail
 
-REPO="voltron-1/UIW-Cyber-Defence-Platform"
+REPO="voltron-1/UIW-CDPv2"
 TITLE="Framework Alignment: NIST CSF 2.0 / ISO 27001 / SOC-CMM / ATT&CK"
 DESC="Bring the platform to the Strategic Framework Architecture: a NIST CSF 2.0 / ISO 27001 governance layer driving SOC-CMM operational maturity and MITRE ATT&CK detection coverage. Deliverables: Governance Pack, CSF 2.0 Profile, ISO 27001 SoA, SOC-CMM Baseline, ATT&CK Navigator Layer + Coverage Scorecard, Master Traceability Matrix. See docs/internal documents/UIW_Strategic_Framework_Alignment_Plan.md."
 

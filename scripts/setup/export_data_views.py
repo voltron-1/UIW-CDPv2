@@ -7,7 +7,7 @@ data = {"type": ["index-pattern"]}
 
 response = requests.post(url, headers=headers, json=data)
 
-output_file = "/home/tjlam/projects/UIW-Cyber-Defence-Platform/configs/server/kibana_data_views_final.ndjson"
+output_file = "/home/tjlam/projects/UIW-CDPv2/configs/server/kibana_data_views_final.ndjson"
 with open(output_file, "w") as f:
     f.write(response.text)
 

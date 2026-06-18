@@ -50,7 +50,7 @@ All main administrative scripts are currently located in the `setup/` subdirecto
 ### Agile / Project Board (`agile/`)
 
 GitHub CLI scripts that provision milestones, labels, and issues on
-`voltron-1/UIW-Cyber-Defence-Platform` and sync the project board. Require an
+`voltron-1/UIW-CDPv2` and sync the project board. Require an
 authenticated `gh` (scopes: `repo`, `project`, `workflow`).
 
 * **`setup_milestones.sh`** / **`setup_labels.sh`** / **`create_pi_issues.sh`**:
