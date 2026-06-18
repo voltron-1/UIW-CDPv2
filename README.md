@@ -36,7 +36,7 @@ The platform achieves its capstone mission when a Student Analyst can successful
 
 ## 🗺️ Program Increment (PI) Roadmap
 
-The project transitions the legacy single-host MVP architecture into an operational, validated campus platform via 7 Program Increments (PIs). Work is tracked on our [GitHub Project Board](https://github.com/voltron-1/UIW-Cyber-Defence-Platform/projects).
+The project transitions the legacy single-host MVP architecture into an operational, validated campus platform via 7 Program Increments (PIs). Work is tracked on our [GitHub Project Board](https://github.com/voltron-1/UIW-CDPv2/projects).
 
 | PI | Core Technical Objective | Lead | Status |
 |---|---|---|---|

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
 # UIW Cyber Defence Platform — Create New PI Issues
-# Repo: voltron-1/UIW-Cyber-Defence-Platform
+# Repo: voltron-1/UIW-CDPv2
 # Creates ~49 new issues across PI-1 through PI-7
 # =============================================================================
 set -euo pipefail
 
-REPO="voltron-1/UIW-Cyber-Defence-Platform"
+REPO="voltron-1/UIW-CDPv2"
 TL="voltron-1"       # Tommy Lammers — Lead Architect
 SG="sterlinggarnett" # Sterling Garnett — Security Analyst
 IP="cryptgrphy"      # Ishmael Pendleton — Network Engineer / Documentation

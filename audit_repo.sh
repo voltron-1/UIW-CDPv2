@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # ==============================================================================
-# UIW-Cyber-Defence-Platform - Repository Posture & Agile Gap Analysis
+# UIW-CDPv2 - Repository Posture & Agile Gap Analysis
 # ==============================================================================
 
-REPO="voltron-1/UIW-Cyber-Defence-Platform"
+REPO="voltron-1/UIW-CDPv2"
 
 # ANSI Color Codes for terminal formatting
 GREEN='\033[0;32m'
