@@ -30,9 +30,14 @@ LINK_REWRITES = {
     "../adr/ADR-001-security-onion-migration.md": "ADR-001-Security-Onion-Migration",
 }
 
-TASK_RE = re.compile(r"^#### (P\d+\.WP\d+\.T\d+) — (.+)$")
-PHASE_RE = re.compile(r"^## (P\d+) — (.+)$")
+# Tolerates a footnote marker on the ID (T2*) and -- in place of the em-dash.
+TASK_RE = re.compile(r"^#### (P\d+\.WP\d+\.T\d+)\*? *(?:—|--) *(.+)$")
+PHASE_RE = re.compile(r"^## (P\d+) *(?:—|--) *(.+)$")
 FIELD_RE = re.compile(r"^- \*\*(Objective|Linked issue|Log):\*\* (.*)$")
+
+
+def warn(msg):
+    print(f"warn: {msg}", file=sys.stderr)
 
 
 def parse_wbs(text):
@@ -51,11 +56,19 @@ def parse_wbs(text):
                     "objective": "", "issues": "", "log": ""}
             phases[-1]["tasks"].append(task)
             continue
+        # A task-looking heading that didn't parse means WBS format drift:
+        # the task would silently vanish from every count. Make it visible.
+        if line.startswith("#### "):
+            warn(f"unparsed task heading dropped: {line!r}")
         m = FIELD_RE.match(line)
         if m and task is not None:
             key = {"Objective": "objective", "Linked issue": "issues",
                    "Log": "log"}[m.group(1)]
             task[key] = m.group(2).strip()
+    for ph in phases:
+        for t in ph["tasks"]:
+            if not t["objective"]:
+                warn(f"task {t['id']} has no parsed Objective (format drift?)")
     return phases
 
 
@@ -63,7 +76,17 @@ def task_status(task):
     return "✅ Done" if task["log"].startswith("✅") else "Open"
 
 
+def cell(value):
+    """Make a value safe for a markdown table cell; blank out em-dash placeholders."""
+    if value in ("", "—"):
+        return ""
+    return value.replace("|", "\\|")
+
+
 def rewrite_links(text):
+    # Known limitation: plain substring replace anchored on "(target)" — not
+    # code-block aware and won't catch path-prefixed forms like
+    # (docs/migration/README.md). Fine for the current docs; revisit if links drift.
     for target, page in LINK_REWRITES.items():
         text = text.replace(f"({target})", f"({page})")
         text = text.replace(f"({target}#", f"({page}#")
@@ -113,10 +136,9 @@ def build_status(phases, sha):
                   "| Task | Objective | Issues | Status | Log |",
                   "|---|---|---|---|---|"]
         for t in ph["tasks"]:
-            log = t["log"] if t["log"] not in ("", "—") else ""
             lines.append(
-                f"| {t['id']} | {t['objective']} | {t['issues']} | "
-                f"{task_status(t)} | {log} |")
+                f"| {t['id']} | {cell(t['objective'])} | {cell(t['issues'])} | "
+                f"{task_status(t)} | {cell(t['log'])} |")
         lines.append("")
     lines.append(f"_Generated from commit `{sha}`._")
     return "\n".join(lines) + "\n"
