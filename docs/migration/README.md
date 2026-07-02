@@ -43,6 +43,9 @@ All salt/pillar citations in [salt-map.md](salt-map.md) refer to this tag.
 
 ## Working areas
 
+- `docs/migration/work-breakdown.md` — the five phases decomposed into
+  Phase → Work Package → Task, with per-task validation checks, dependencies,
+  and linked issues.
 - `docs/migration/integration-inventory.md` — every component that touches
   ES/Kibana/Logstash directly, with its SO 3.1 target method.
 - `docs/migration/salt-map.md` — where the relevant config lives in
