@@ -1,5 +1,91 @@
 # Phase 0 Evidence
 
+Gate 0 exit criteria (per `execution-runbook.md`): scaffold on `main` · zero
+unfilled TODOs across ADR-001 / integration-inventory / so-install-runbook ·
+ELK snapshot exists with restorability verified · `evidence/phase-0.md`
+written.
+
+**Gate 0 status: advancing with one flagged gap (0.4), by explicit decision
+2026-07-03.** 0.4's TODOs are real, unfilled, and expected to stay that way
+until Tommy/Ishmael supply target-host/NIC/HOME_NET/ISO values — that gap
+blocks Phase 1 (hardware) specifically, not the rest of the migration.
+Everything else in the exit criteria is met.
+
+## 0.0 — Path normalization
+
+- `docs/migration/` and `docs/migration/evidence/` created.
+- `docs/migration/integration-inventory.md` was already at the current path
+  (scaffold never placed it at the old `docs/integration-inventory.md`) — no
+  move needed.
+- `docs/migration/so-install-runbook.md` created from template, sections
+  Target Host / NIC Layout / HOME_NET / ISO Source & Verification, each with
+  a TODO placeholder (see 0.4).
+- This runbook confirmed at `docs/migration/execution-runbook.md`.
+- One deviation found and fixed: the Sigma migration notes were nested at
+  `migration/detections/MIGRATION_NOTES.md`; moved to `detections/` to match
+  the runbook's own canonical-paths table, all cross-references updated.
+
+## 0.1 — PR review
+
+- Additive-only confirmed: `git show d6cd8e7 --stat` shows zero lines
+  touched in the top-level `README.md`.
+- `reference/` confirmed gitignored (`git check-ignore` passes), never
+  tracked.
+- Tree diffed against the scaffold spec: one deviation (the
+  `migration/detections/` nesting above), fixed.
+- **Deviation from the runbook's assumption:** PR #154 was already
+  **merged** (`mergedAt` 2026-07-02T17:07:04Z, `mergedBy` voltron-1) by the
+  time this session reached 0.1 — it merged only the first 10-file scaffold
+  commit. "Leave the PR open until 0.2–0.6" was therefore not literally
+  possible; all subsequent Phase 0 commits landed on `feat/so-migration-scaffold`
+  with no open PR. A new PR is proposed at 0.7 to land them.
+
+## 0.2 — ADR-001
+
+- License Posture, Free-vs-Pro Boundary, Decision, Consequences sections all
+  present in `docs/adr/ADR-001-security-onion-migration.md`.
+- Gap found and fixed: Free-vs-Pro list was missing **OIDC**; added
+  (Pro-only list now reads MCP Server, External API, Reports, OIDC, Onion AI).
+- Cross-references issue **#150 (D-38)**.
+- Zero TODO/TBD strings (`grep -inE "TODO|TBD"` — clean).
+
+## 0.3 — Integration inventory
+
+- One row per component in `docs/migration/integration-inventory.md`:
+  Flask SOAR Response Agent, HDI/self-critique orchestrator, Ollama layer,
+  `slo_metrics.py`, `weekly_ciso_report.py` (added — the runbook lists it
+  explicitly, the original scaffold template didn't have it as its own row),
+  Kibana dashboards/saved objects, Sigma detection rules/CI, legacy
+  Logstash configs, legacy Filebeat shippers.
+- *Current method* filled for every row from actual source inspection (not
+  invented) — auth mechanism, TLS verification state, and file paths cited
+  per component. *SO target method* correctly left empty for Phase 4.
+- Notable finding surfaced during this step: **the HDI/self-critique
+  orchestrator has no implementation anywhere in this repo** — referenced
+  only in planning docs. Phase 4's "re-point the orchestrator" currently
+  assumes code that doesn't exist yet.
+
+## 0.4 — SO install runbook values — OPEN
+
+- `docs/migration/so-install-runbook.md` exists with the required sections,
+  but all 5 value groups remain TODO: target host spec, NIC layout,
+  monitor-NIC SPAN/mirror confirmation, HOME_NET CIDR ranges, exact
+  ISO/KEYS/signature URLs for `3.1.0-20260528`.
+- Explicitly deferred by Tommy (2026-07-02) — no placeholders invented, per
+  rule 6. **This blocks Phase 1 (hardware work) only; it does not block
+  Gate 0 advancement or opening the follow-up PR.**
+
+## 0.5 — Issue board labeling
+
+- `so-migration:obviates` / `reduces` / `decision` labels already existed
+  and were already fully applied before this session touched them — no
+  action taken, verified only.
+- Verified via `gh` (not from memory or the runbook's tables), twice, on two
+  different dates: **24** issues `obviates`, **17** issues `reduces`,
+  `decision` on exactly `#149` and `#102` — matches the runbook's index
+  table exactly, including the deliberate, correct exclusion of `#103`
+  (a rule-content bug fix, not something the migration obviates).
+
 ## 0.6 — Freeze checkpoint / D-37
 
 **Snapshot mechanism:** Elasticsearch Snapshot Lifecycle Management (SLM), not
@@ -20,6 +106,9 @@ than building a new one.
    policies, and index templates — all four steps returned HTTP 200.
 3. Triggered an on-demand snapshot: `apply-lifecycle.sh --snapshot-now` →
    `POST _slm/policy/suburban-soc-daily-snapshots/_execute` → HTTP 200.
+4. Stopped `elasticsearch` again afterward (`docker compose stop
+   elasticsearch`) — Suburban-SOC returned to its pre-session state (only
+   `zeek-host-capture` running).
 
 **Result:**
 
@@ -48,11 +137,16 @@ the first one taken deliberately as a migration freeze point.
 
 **Per the runbook:** this snapshot is the honest version of issue **#149** —
 not an in-place ELK→OS migration (which #149 originally scoped), but the
-rollback point before the parallel SO grid is built. #149 should be closed as
-superseded once this is reviewed, per Phase 5's resolution of the
-decision-gated set.
+rollback point before the parallel SO grid is built. Noted on #149 directly
+(see comment, 2026-07-03). #149 stays open — it's decision-gated and closes
+in the Phase 5 sweep, not here.
 
-**Note:** the `elasticsearch` container in Suburban-SOC is still running as
-of this checkpoint (only `zeek-host-capture` was running before this
-session). Left up in case further inspection is wanted — say the word if it
-should be stopped to return to the prior state.
+## 0.7 — Merge
+
+Not yet proposed as of this evidence snapshot. PR #154 already merged the
+initial scaffold; a new PR from `feat/so-migration-scaffold` is the proposed
+vehicle for everything since (0.0–0.6 work in commits `1eef0d4`, `03dca15`,
+`518413e`, plus golden rule 5 in the runbook itself). Per rule 3, opening
+that PR is not a merge and proceeds without a separate go-ahead; merging it
+requires Tommy's explicit approval regardless of how clean the checklist
+looks.
