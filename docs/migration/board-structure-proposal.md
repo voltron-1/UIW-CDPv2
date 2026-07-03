@@ -9,6 +9,11 @@ collaborators (see project memory); owner names are recorded in each
 issue's body instead. The `so-migration:task` label was created fresh (did
 not exist before this pass).
 
+All 38 issues were also added to GitHub Project **#13, "UIW CDPv2"**
+(project item count 83 → 121, confirmed). Per Tommy's standing instruction
+(2026-07-03), every issue created in this repo from now on gets added to
+project #13 the same way — not just this batch.
+
 Read against the live board via `gh` on 2026-07-03: 152 existing issues
 (#1–#152), all `OPEN`, across 8 existing milestones (`PI-1`…`PI-7`,
 `Framework Alignment`) — a separate, pre-existing taxonomy. The six new
