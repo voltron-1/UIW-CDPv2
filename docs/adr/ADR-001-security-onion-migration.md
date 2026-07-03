@@ -34,7 +34,7 @@ a borrowed built-in credential such as `so_elastic`.
 ## Free vs. Pro boundary
 
 Security Onion Pro features we will **not** use: MCP Server, External API,
-Reports, and Onion AI. Our Ollama local-LLM layer, Flask SOAR agent, and
+Reports, OIDC, and Onion AI. Our Ollama local-LLM layer, Flask SOAR agent, and
 custom reporting are the free-tier equivalents of those capabilities and
 constitute the capstone's original contribution. This boundary is deliberate:
 the project must demonstrate that an AI-assisted SOC layer can be built on the

@@ -11,5 +11,5 @@ Security Onion 3.1:
    migrated rule set's coverage did not regress.
 
 Gates must run against SO's ECS field mappings (post-triage rules from
-`migration/detections/`) and deploy to
+`detections/`) and deploy to
 `/nsm/rules/custom-local-repos/local-sigma`.
