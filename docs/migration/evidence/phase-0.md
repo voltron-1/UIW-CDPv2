@@ -212,3 +212,13 @@ removal: empty on disk, gitlink at commit `ccdb45af...` with no
 `.gitmodules` entry anywhere in the repo, so nothing resolvable was lost.
 Next push to `main` re-triggers Wiki Sync; expected green now that
 `actions/checkout`'s submodule-cleanup step has nothing broken to trip on.
+
+**Verified fixed (2026-07-03):** PR #194 merged (`806e246`). `Wiki Sync` on
+that commit completed `success` in 6s (run `28635383874`) — `actions/
+checkout` finished cleanly, no submodule error. The generator built all 6
+wiki pages; the run then hit the *separate, already-known* fact that the
+GitHub wiki has never been manually initialized (`git clone
+...UIW-CDPv2.wiki.git` → "Repository not found") — handled gracefully by
+design (`::warning::` + `SKIP_SYNC=1`, exit 0), not a failure. That one-time
+manual init (visit the wiki tab, click "Create the first page") is still
+outstanding and unrelated to this fix.
