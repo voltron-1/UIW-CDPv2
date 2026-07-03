@@ -155,15 +155,15 @@ unprefixed commands run on the engineering workstation in the repo root.
 ### P3.WP1 — Inventory and ECS triage
 
 #### P3.WP1.T1 — Inventory and classify every existing Sigma rule
-- **Objective:** Produce a per-rule inventory (id, title, logsource, status) of the legacy rule set in `migration/detections/`.
-- **Expected outcome:** `migration/detections/rule-inventory.md` with one row per rule file.
+- **Objective:** Produce a per-rule inventory (id, title, logsource, status) of the legacy rule set in `detections/`.
+- **Expected outcome:** `detections/rule-inventory.md` with one row per rule file.
 - **Validation:** Inventory row count equals `find rules -name '*.yml' -o -name '*.yaml' | wc -l`.
 - **Depends on:** —
 - **Linked issue:** #19
 - **Log:** —
 
 #### P3.WP1.T2 — Triage each rule against SO's ECS field mappings
-- **Objective:** Classify every inventoried rule as clean / remap / rework per `migration/detections/MIGRATION_NOTES.md`.
+- **Objective:** Classify every inventoried rule as clean / remap / rework per `detections/MIGRATION_NOTES.md`.
 - **Expected outcome:** Every inventory row carries exactly one triage class and, for remaps, the field-mapping delta.
 - **Validation:** `grep -cE 'clean|remap|rework' migration/detections/rule-inventory.md` equals the inventory row count.
 - **Depends on:** P3.WP1.T1
@@ -190,7 +190,7 @@ unprefixed commands run on the engineering workstation in the repo root.
 
 #### P3.WP2.T2 — Enable and baseline-tune the migrated rules
 - **Objective:** Enable the migrated rules in SOC and record any threshold/filter overrides applied.
-- **Expected outcome:** All staged rules enabled; overrides documented in `migration/detections/`.
+- **Expected outcome:** All staged rules enabled; overrides documented in `detections/`.
 - **Validation:** `[SO] sudo so-detections-runtime-status` reports healthy, and enabled-rule count in the Detections UI matches the staged count minus documented exclusions.
 - **Depends on:** P3.WP2.T1
 - **Linked issue:** —

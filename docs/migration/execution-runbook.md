@@ -30,6 +30,7 @@
 2. **The custom layer is the capstone.** SO replaces the *pipeline* (Zeek→Filebeat→Logstash→ES→Kibana). The SOAR agent, HDI orchestrator, Ollama layer, four-gate Sigma CI, and `slo_metrics.py` **survive and re-point** — they are the original contribution, so they get re-integrated, not rebuilt.
 3. **Least-privilege, always.** Re-pointed components get a **dedicated** ES service account mirroring SO's `auth.sls` pattern — never `so_elastic`.
 4. **Every gate produces evidence, recorded in `docs/migration/evidence/phase-N.md`** — command output, screenshots by filename, issue links. That evidence *is* the capstone demo.
+5. **Committed means pushed.** Every commit is pushed to origin in the same work session — local-only commits are invisible to collaborators, to CI, and to any agent reading remote state, and divergence between local and origin has already cost this project a debugging cycle. `git push` immediately follows `git commit`; a session never ends with unpushed work.
 
 ---
 
