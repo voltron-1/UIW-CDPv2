@@ -1,8 +1,13 @@
 # Board Structure Proposal — Security Onion Migration
 
-**Status: PROPOSED. Nothing below has been created in GitHub yet.** This is
-step 0.5b's summary for review; creation happens in one `gh` pass only after
-explicit approval, per rule 3.
+**Status: CREATED.** Approved by Tommy 2026-07-03 and created in one `gh`
+pass the same day. Milestones #9–#14, task issues #156–#193 (mapping table
+at the bottom of this doc). Assignee on every task issue is `voltron-1`,
+not the named `[HUMAN]` owners — this repo is single-maintainer and
+Tommy/Sterling/Ishmael are name placeholders, not separate GitHub
+collaborators (see project memory); owner names are recorded in each
+issue's body instead. The `so-migration:task` label was created fresh (did
+not exist before this pass).
 
 Read against the live board via `gh` on 2026-07-03: 152 existing issues
 (#1–#152), all `OPEN`, across 8 existing milestones (`PI-1`…`PI-7`,
@@ -132,3 +137,50 @@ per rule 3), body notes point at the existing evidence.
 - 0 issues closed, 0 existing issues modified, 0 duplicates
 
 Awaiting approval before any `gh` create calls run.
+
+---
+
+## Created — ID to GitHub issue mapping
+
+Milestones: M1=#9, M2=#10, M3=#11, M4=#12, M5=#13, M6=#14.
+
+| ID | Title | Issue |
+|---|---|---|
+| [P0.0] | Path normalization | #156 |
+| [P0.1] | PR review | #157 |
+| [P0.2] | ADR-001 | #158 |
+| [P0.3] | Integration inventory | #159 |
+| [P0.4] | SO install runbook values | #160 |
+| [P0.6] | Freeze checkpoint / D-37 | #161 |
+| [P0.7] | Merge | #162 |
+| [P1.1] | Verify SO 3.1 ISO checksum + GPG signature | #163 |
+| [P1.2] | Install SO 3.1 Standalone, complete setup wizard | #164 |
+| [P1.3] | Validate grid provisioning | #165 |
+| [P1.4] | Record the five ES service accounts + auth.sls location | #166 |
+| [P2.1] | Confirm switch SPAN/mirror feeds SO monitor NIC | #167 |
+| [P2.2] | Enroll lab endpoints into Elastic Agent/Fleet | #168 |
+| [P2.3] | Spot-check ECS normalization | #169 |
+| [P2.4] | Confirm sensor-health/heartbeat in Grid view | #170 |
+| [P2.5] | Parity check vs. old-ELK | #171 |
+| [P2.6] | Re-measure ingest lag | #172 |
+| [P3.1] | Inventory + classify every Sigma rule | #173 |
+| [P3.2] | Triage ECS field mappings | #174 |
+| [P3.3] | Decision point: retire translate_rules.py? | #175 |
+| [P3.4] | Fix RDP-hijack rule mis-tag | #176 |
+| [P3.5] | Deploy rules to local-sigma repo path | #177 |
+| [P3.6] | Retarget four-gate Sigma CI at SO's ES | #178 |
+| [P3.7] | Validate each kept rule fires against live SO data | #179 |
+| [P4.1] | Create dedicated least-priv ES service accounts | #180 |
+| [P4.2] | Re-point Flask SOAR Response Agent | #181 |
+| [P4.3] | Re-point HDI/self-critique orchestrator | #182 |
+| [P4.4] | Re-point slo_metrics.py, fix #91 | #183 |
+| [P4.5] | Confirm Ollama Telemetry-Stays-on-Campus invariant | #184 |
+| [P4.6] | End-to-end dry run | #185 |
+| [P5.1] | Run Adversary-in-a-Box kill-chain | #186 |
+| [P5.2] | Confirm telemetry-presence + pipeline-blinding detection | #187 |
+| [P5.3] | Close the obviated set | #188 |
+| [P5.4] | Re-scope the reduced set | #189 |
+| [P5.5] | Resolve the decision-gated set | #190 |
+| [P5.6] | Scrub + rotate the committed elastic superuser credential | #191 |
+| [P5.7] | Decommission old ELK | #192 |
+| [P5.8] | Update ADR-001 consequences with actuals | #193 |
