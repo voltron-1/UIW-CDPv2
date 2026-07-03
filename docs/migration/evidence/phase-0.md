@@ -158,3 +158,57 @@ vehicle for everything since (0.0–0.6 work in commits `1eef0d4`, `03dca15`,
 that PR is not a merge and proceeds without a separate go-ahead; merging it
 requires Tommy's explicit approval regardless of how clean the checklist
 looks.
+
+## Post-merge addendum — CI failure on db11e45 (2026-07-03)
+
+After PR #155 merged (`db11e45`), `gh run list --branch main --limit 5`
+showed **Wiki Sync** failed on that commit while **CodeQL Advanced**
+succeeded on the same commit; **automate-infra-board** did not run
+(`workflow_dispatch`-only, not push-triggered — not implicated).
+
+**Cause, from `gh run view 28634311655 --log-failed`:** the failure is
+inside `actions/checkout`'s own post-checkout credential-cleanup step, not
+in the wiki-sync logic itself:
+
+```
+fatal: No url found for submodule path 'wiki-temp' in .gitmodules
+##[error]The process '/usr/bin/git' failed with exit code 128
+```
+
+Chain of cause:
+1. `wiki-temp` is a pre-existing broken git submodule reference in the repo
+   tree (`git ls-files -s` shows it as a gitlink, mode `160000`, commit
+   `ccdb45af28d92d9c71360b1932f4c42fe6b137dd`) with **no `.gitmodules`
+   file** anywhere in the repo defining its URL. Predates this session's
+   work entirely.
+2. `actions/checkout` only enumerates submodules during its post-checkout
+   credential-removal cleanup, which only runs when `persist-credentials:
+   false` is set — unconditionally, regardless of the `submodules:` input.
+3. `wiki-sync.yml`'s checkout step sets `persist-credentials: false` — a
+   hardening fix added earlier this session per the security-auditor's
+   finding. That's what triggers the cleanup, which hits the broken
+   `wiki-temp` gitlink and fails before checkout completes.
+4. CodeQL's checkout step uses plain `actions/checkout@v4` with no `with:`
+   overrides (`persist-credentials` defaults to `true`), so it never runs
+   that cleanup and never touches submodules — same commit, same broken
+   repo state, no failure.
+
+**Net effect:** an earlier security fix in this session surfaced a
+pre-existing, unrelated repo defect. The wiki-sync automation's actual
+logic (the Python generator, the wiki clone/publish) never got a chance to
+run.
+
+**Fix: proposed, not yet applied.** Reported to Tommy for a decision between
+(1) removing the broken `wiki-temp` gitlink outright — the root-cause fix,
+since it's empty/unresolvable and functionally superseded by the wiki-sync
+automation itself — or (2) reverting `persist-credentials: false` on just
+this workflow's checkout step as a narrower fallback. Awaiting go-ahead per
+rule 3 before touching either the workflow file or tracked repo content.
+
+**Resolved (2026-07-03):** Tommy chose option 1. Removed the broken
+`wiki-temp` gitlink (`git rm wiki-temp`) — root-cause fix, `persist-
+credentials: false` stays in place on `wiki-sync.yml`. Verified before
+removal: empty on disk, gitlink at commit `ccdb45af...` with no
+`.gitmodules` entry anywhere in the repo, so nothing resolvable was lost.
+Next push to `main` re-triggers Wiki Sync; expected green now that
+`actions/checkout`'s submodule-cleanup step has nothing broken to trip on.
