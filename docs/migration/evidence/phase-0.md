@@ -204,3 +204,11 @@ since it's empty/unresolvable and functionally superseded by the wiki-sync
 automation itself — or (2) reverting `persist-credentials: false` on just
 this workflow's checkout step as a narrower fallback. Awaiting go-ahead per
 rule 3 before touching either the workflow file or tracked repo content.
+
+**Resolved (2026-07-03):** Tommy chose option 1. Removed the broken
+`wiki-temp` gitlink (`git rm wiki-temp`) — root-cause fix, `persist-
+credentials: false` stays in place on `wiki-sync.yml`. Verified before
+removal: empty on disk, gitlink at commit `ccdb45af...` with no
+`.gitmodules` entry anywhere in the repo, so nothing resolvable was lost.
+Next push to `main` re-triggers Wiki Sync; expected green now that
+`actions/checkout`'s submodule-cleanup step has nothing broken to trip on.
