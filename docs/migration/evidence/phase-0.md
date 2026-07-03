@@ -11,6 +11,14 @@ until Tommy/Ishmael supply target-host/NIC/HOME_NET/ISO values — that gap
 blocks Phase 1 (hardware) specifically, not the rest of the migration.
 Everything else in the exit criteria is met.
 
+**Merge approval (Tommy, 2026-07-03):** approved to merge PR #155 with the
+0.4 exception — "zero unfilled TODOs except 0.4 (so-install-runbook
+values), deferred pending school hardware allocation." This is the policy
+decision that the 0.4 gap is an acceptable, tracked deferral, not a defect.
+It does not by itself authorize the merge to execute — per rule 3, that
+still requires Tommy's separate, explicit confirmation after reviewing the
+PR as updated.
+
 ## 0.0 — Path normalization
 
 - `docs/migration/` and `docs/migration/evidence/` created.
