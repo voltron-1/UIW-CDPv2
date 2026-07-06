@@ -4,8 +4,8 @@
 **Gate:** Gate 1 · **Started:** 2026-07-05 · **Status:** ✅ **Gate 1 MET
 (2026-07-05)** — ISO verified (A1), SO Standalone installed (A2), `so-status`
 green + SOC console up + Suricata producing 235 alerts via `so-test` (A3), legacy
-ELK untouched. A4 (record ES service accounts) still to capture for Phase 4;
-production SPAN traffic deferred to Phase 2 / #167.
+ELK untouched, A4 (ES service accounts) recorded. Getting simulated traffic to
+the sensor is Phase 2 / #167 — dev env, so sensor traffic is simulated by design.
 
 > Golden rule 4: every gate produces evidence here — command output, screenshots
 > by filename, issue links. This file is the capstone-demo record for Phase 1.
@@ -83,9 +83,9 @@ Management `ens160` = 192.168.126.128/24; monitor `bond0`(`ens224`); HOME_NET
       critical-high** in SOC → Alerts after `so-test`, incl. `ET MALWARE Zbot
       POST Request to C2`, `ET MALWARE Tibs/Harnig Downloader`, `ET INFO PE
       EXE/DLL download` (screenshot `phase1-alerts-from-so-test.png`). Monitor
-      NIC has no live source; events came from `sudo so-test` replaying
-      `/opt/samples/*` onto the monitor interface (`so-tcpreplay`). Production
-      SPAN wiring deferred to Phase 2 / #167.
+      NIC had no traffic yet; events came from `sudo so-test` replaying
+      `/opt/samples/*` onto the monitor interface (`so-tcpreplay`). Formalizing
+      simulated-traffic injection to the sensor is Phase 2 / #167.
       _Zeek: `so-zeek` healthy and 4,102 flows were replayed; to document Zeek
       explicitly, filter Hunt on `event.module:zeek` (recommended completeness
       capture, not a Gate 1 blocker)._
@@ -162,8 +162,8 @@ Confirmed from the pinned reference (`reference/salt/elasticsearch/auth.sls`);
 
 **Gate 1 verdict: ✅ MET (2026-07-05).** Grid healthy, console reachable, sensor
 pipeline proven end-to-end, A1–A4 all recorded. Follow-ups (not Gate 1 blockers):
-production SPAN traffic (Phase 2 / #167); optional Zeek-filter screenshot for
-completeness.
+formalize simulated-traffic injection to the sensor (Phase 2 / #167); optional
+Zeek-filter screenshot for completeness.
 
 **Rollback:** the grid is standalone and additive — a Phase 1 failure touches
 nothing on the legacy ELK stack. Rebuild or re-run setup.

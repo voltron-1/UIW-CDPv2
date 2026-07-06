@@ -10,9 +10,9 @@ Phase 1 (grid stand-up) begins. Gate 0 requires zero unfilled TODOs here.
 > ISO Source & Verification came from the pinned reference clone; Target Host,
 > NIC Layout, and HOME_NET were supplied by the operator against a VMware
 > Workstation Standalone VM (ISO verified before install). One carried-forward
-> item, **not** a #160 blocker: the monitor NIC has no live traffic source, so
-> the Gate 1 "sensors producing events" criterion waits on test/SPAN traffic
-> (SPAN wiring is Phase 2 / #167).
+> item, **not** a #160 blocker: the monitor NIC has no traffic yet. This is a dev
+> environment, so sensor traffic is **simulated by design** (`so-test`/`tcpreplay`
+> or the sim scripts); formalizing that injection is Phase 2 / #167.
 
 ## Target Host
 
@@ -28,12 +28,12 @@ Phase 1 (grid stand-up) begins. Gate 0 requires zero unfilled TODOs here.
 
 - Management interface (name, IP/CIDR): `ens160` — 192.168.126.128/24
 - Monitor interface (name): `bond0` (member: `ens224`)
-- Monitor NIC's SPAN/mirror source confirmed and reachable (Ishmael): **Not yet —
-  no live source attached.** Zeek/Suricata therefore see no network events until
-  the monitor NIC is fed traffic. Wiring the real SPAN/mirror is Phase 2 (P2.1 /
-  [#167](https://github.com/voltron-1/UIW-CDPv2/issues/167)); for a Gate 1 smoke
-  test, attach `ens224` to a promiscuous-mode vSwitch carrying lab traffic or
-  generate test traffic on the monitored segment.
+- Monitor NIC traffic source: **none attached yet.** Dev environment — sensor
+  traffic is **simulated by design** (no production feed). Zeek/Suricata see
+  events once simulated traffic reaches `ens224`: replay pcaps onto it
+  (`so-test`/`tcpreplay`) or run the sims on a promiscuous-mode vSwitch the NIC
+  observes. Formalizing the injection method is Phase 2 (P2.1 /
+  [#167](https://github.com/voltron-1/UIW-CDPv2/issues/167)).
 
 ## HOME_NET
 
