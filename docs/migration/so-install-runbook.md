@@ -6,27 +6,42 @@ Claude Code. **Do not fill TODOs with invented values** — every field below
 must come from a real decision about the target hardware/network before
 Phase 1 (grid stand-up) begins. Gate 0 requires zero unfilled TODOs here.
 
-> **Status (2026-07-05, #160 / P0.4):** The **ISO Source & Verification**
-> section below is now filled from the pinned reference clone (deterministic,
-> not hardware-dependent). **Remaining before Phase 1 can start** — three
-> hardware/network decisions only Tommy/Ishmael can supply: **Target Host**,
-> **NIC Layout**, and **HOME_NET**. Fill those, drop the `TODO`s, and #160 closes.
+> **Status (2026-07-05, #160 / P0.4): all values supplied — #160 ready to close.**
+> ISO Source & Verification came from the pinned reference clone; Target Host,
+> NIC Layout, and HOME_NET were supplied by the operator against a VMware
+> Workstation Standalone VM (ISO verified before install). One carried-forward
+> item, **not** a #160 blocker: the monitor NIC has no live traffic source, so
+> the Gate 1 "sensors producing events" criterion waits on test/SPAN traffic
+> (SPAN wiring is Phase 2 / #167).
 
 ## Target Host
 
-- Make/model or VM spec: TODO
-- CPU / RAM / disk allocated to the SO Standalone install: TODO
-- Physical location / rack or hypervisor host: TODO
+- Make/model or VM spec: VMware Workstation Pro VM (guest OS: Oracle Linux 9,
+  installed from the SO 3.1 ISO)
+- CPU / RAM / disk allocated to the SO Standalone install: 4 vCPU / 32 GB RAM /
+  200 GB disk — 32 GB is comfortable; 4 vCPU and 200 GB sit at SO's documented
+  Standalone minimums, so expect slow first-boot convergence and limited
+  retention headroom.
+- Physical location / rack or hypervisor host: VMware Workstation Pro on the lab
+  workstation
 
 ## NIC Layout
 
-- Management interface (name, IP/CIDR): TODO
-- Monitor interface (name): TODO
-- Monitor NIC's SPAN/mirror source confirmed and reachable (Ishmael): TODO
+- Management interface (name, IP/CIDR): `ens160` — 192.168.126.128/24
+- Monitor interface (name): `bond0` (member: `ens224`)
+- Monitor NIC's SPAN/mirror source confirmed and reachable (Ishmael): **Not yet —
+  no live source attached.** Zeek/Suricata therefore see no network events until
+  the monitor NIC is fed traffic. Wiring the real SPAN/mirror is Phase 2 (P2.1 /
+  [#167](https://github.com/voltron-1/UIW-CDPv2/issues/167)); for a Gate 1 smoke
+  test, attach `ens224` to a promiscuous-mode vSwitch carrying lab traffic or
+  generate test traffic on the monitored segment.
 
 ## HOME_NET
 
-- Lab subnet CIDR range(s) to declare as HOME_NET: TODO
+- Lab subnet CIDR range(s) to declare as HOME_NET: 10.18.81.0/24 — note this
+  differs from the management subnet (192.168.126.0/24); confirm the monitor NIC
+  will actually carry 10.18.81.0/24 traffic once SPAN is wired, or HOME_NET will
+  not match what the sensors see.
 
 ## ISO Source & Verification
 

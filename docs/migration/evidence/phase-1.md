@@ -2,7 +2,9 @@
 
 **Milestone:** M2 / [#10](https://github.com/voltron-1/UIW-CDPv2/issues/10) ·
 **Gate:** Gate 1 · **Started:** 2026-07-05 · **Status:** ⏳ In progress —
-pre-flight staged; on-hardware steps pending hardware allocation.
+ISO verified (A1) and SO Standalone installed on a VMware Workstation VM (A2);
+awaiting `so-status` / SOC-console validation (A3). Sensor-events criterion is
+blocked on the monitor NIC having no live traffic (test/SPAN traffic needed).
 
 > Golden rule 4: every gate produces evidence here — command output, screenshots
 > by filename, issue links. This file is the capstone-demo record for Phase 1.
@@ -48,7 +50,9 @@ sha256sum securityonion-3.1.0-20260528.iso
 - Primary key fingerprint: `C804 A93D 36BE 0C73 3EA1 9644 7C10 60B7 FE50 7013`
 - SHA256: `62FAB57E247C843D6A04F0796D8162C732B65D82FC3E4A59D087135B9FD32912`
 
-**Result:** _PENDING — paste `gpg --verify` + `sha256sum` output here._
+**Result:** ✅ Operator-attested (2026-07-05): ISO verified **before** install.
+_Paste the actual `gpg --verify` + `sha256sum` transcript here if captured, to
+complete the golden-rule-4 record._
 
 ---
 
@@ -57,22 +61,26 @@ sha256sum securityonion-3.1.0-20260528.iso
 Depends on A1 verified **and** the Target Host / NIC Layout / HOME_NET values in
 `so-install-runbook.md`.
 
-- [ ] Boot the verified ISO (installs Oracle Linux 9 + Security Onion together)
-- [ ] Setup wizard: choose **Standalone**
-- [ ] Assign the **monitor interface** (SPAN/mirror destination) **distinct from
-      the management interface**
-- [ ] Set **HOME_NET** to the lab subnet CIDR(s) from the runbook
+- [x] Boot the verified ISO (installs Oracle Linux 9 + Security Onion together)
+- [x] Setup wizard: choose **Standalone**
+- [x] Assign the **monitor interface** (`bond0`/`ens224`) **distinct from the
+      management interface** (`ens160`)
+- [x] Set **HOME_NET** to the lab subnet CIDR(s) — `10.18.81.0/24`
 
-**Result:** _PENDING — record chosen interfaces + HOME_NET as installed._
+**Result:** ✅ Installed on a VMware Workstation Pro VM (4 vCPU / 32 GB / 200 GB).
+Management `ens160` = 192.168.126.128/24; monitor `bond0`(`ens224`); HOME_NET
+10.18.81.0/24. **Caveat:** monitor NIC has no live traffic source yet.
 
 ---
 
 ## A3 — Validate grid provisioning ([#165](https://github.com/voltron-1/UIW-CDPv2/issues/165))
 
-- [ ] `sudo so-status` — all services green
-- [ ] SOC console reachable over HTTPS; login works
+- [ ] `sudo so-status` — all services green (may take a while on 4 vCPU)
+- [ ] SOC console reachable over HTTPS (`https://192.168.126.128`); login works
 - [ ] Default **Zeek** and **Suricata** telemetry landing (SOC → Grid, and the
-      Hunt / Dashboards views show live events)
+      Hunt / Dashboards views show live events) — **needs traffic on the monitor
+      NIC**: with no live source, generate test traffic on the monitored segment
+      or attach `ens224` to a promiscuous vSwitch; full SPAN wiring is Phase 2 / #167.
 
 **Result:** _PENDING — paste `so-status` output; list screenshots below._
 
