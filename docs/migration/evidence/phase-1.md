@@ -133,15 +133,21 @@ accounts (each re-pointed component mirrors — never reuses — this pattern).
 
 `auth.sls` location on the manager: `/opt/so/saltstack/local/pillar/elasticsearch/auth.sls`
 
-| Account | Purpose (as documented by SO) |
-|---|---|
-| _pending_ | |
-| _pending_ | |
-| _pending_ | |
-| _pending_ | |
-| _pending_ | |
+Confirmed from the pinned reference (`reference/salt/elasticsearch/auth.sls`);
+**names + location only — no secrets recorded** (CLAUDE.md rule):
 
-**Result:** _PENDING — also append the confirmed accounts to `integration-inventory.md`._
+| Account | Role (SO built-in) |
+|---|---|
+| `so_elastic` | Elasticsearch superuser / bootstrap — **never reused** by re-pointed components (golden rule 3) |
+| `so_kibana` | Kibana → Elasticsearch service account |
+| `so_logstash` | Logstash ingest → Elasticsearch |
+| `so_beats` | Beats / Elastic Agent → Elasticsearch |
+| `so_monitor` | Stack monitoring / health |
+
+**Result:** ✅ Recorded. `auth.sls` on the manager:
+`/opt/so/saltstack/local/pillar/elasticsearch/auth.sls`. Phase 4 (P4.1) creates
+**new dedicated least-privilege** accounts mirroring this pattern (e.g.
+`svc_soar`, `svc_slo`) — never these built-ins.
 
 ---
 
@@ -151,12 +157,13 @@ accounts (each re-pointed component mirrors — never reuses — this pattern).
 - [x] SOC console up (A3) — HTTPS login confirmed
 - [x] SO sensors producing events into Elasticsearch (A3) — 235 Suricata alerts via `so-test`
 - [x] Old ELK still running untouched in parallel — SO on an isolated VM; legacy stack unaffected
-- [ ] #163–#165 closed with evidence links (A4/#166 remains — record ES service accounts for Phase 4)
+- [x] A4 (#166) — five ES service accounts + `auth.sls` location recorded (for Phase 4)
+- [ ] #160, #163–#166 closed with evidence links (awaiting operator go-ahead)
 
 **Gate 1 verdict: ✅ MET (2026-07-05).** Grid healthy, console reachable, sensor
-pipeline proven end-to-end. Follow-ups (not Gate 1 blockers): A4 service-account
-capture (#166, feeds Phase 4); production SPAN traffic (Phase 2 / #167); optional
-Zeek-filter screenshot for completeness.
+pipeline proven end-to-end, A1–A4 all recorded. Follow-ups (not Gate 1 blockers):
+production SPAN traffic (Phase 2 / #167); optional Zeek-filter screenshot for
+completeness.
 
 **Rollback:** the grid is standalone and additive — a Phase 1 failure touches
 nothing on the legacy ELK stack. Rebuild or re-run setup.
