@@ -78,10 +78,18 @@ Management `ens160` = 192.168.126.128/24; monitor `bond0`(`ens224`); HOME_NET
 - [x] `sudo so-status` — all services green (host `cardinal-so`, 2026-07-05)
 - [x] SOC console reachable over HTTPS (`https://192.168.126.128`); login works
       — operator-confirmed 2026-07-05
-- [ ] Default **Zeek** and **Suricata** telemetry landing (SOC → Grid, and the
-      Hunt / Dashboards views show live events) — **needs traffic on the monitor
-      NIC**: with no live source, generate test traffic on the monitored segment
-      or attach `ens224` to a promiscuous vSwitch; full SPAN wiring is Phase 2 / #167.
+- [ ] Default **Zeek** and **Suricata** telemetry landing (SOC → Alerts / Hunt
+      show events). Monitor NIC has no live source, so validated via
+      `sudo so-test` — it replays sample pcaps from `/opt/samples/*` onto the
+      monitor interface (`so-tcpreplay`) + injects a sample firewall log,
+      generating Zeek/Suricata events. Full production SPAN wiring is deferred to
+      Phase 2 / #167.
+
+> **Decision (2026-07-05):** direct grid access over SSH is **deferred to
+> Phase 4** — this WSL2 workstation can't route to the VM's VMware-NAT IP, and
+> `so-*` commands need `sudo`. Phase 4 (P4.1) sets up a dedicated read-only ES
+> service account for programmatic access the least-privilege way. Phase 1
+> evidence is captured from operator-run output.
 
 **Result:** ✅ `so-status` clean — all 23 containers `running` (screenshot
 `phase1-so-status.png`): so-dockerregistry, so-elastalert, so-elastic-fleet,
