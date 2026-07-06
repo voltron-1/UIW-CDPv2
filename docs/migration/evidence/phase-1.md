@@ -91,6 +91,14 @@ Management `ens160` = 192.168.126.128/24; monitor `bond0`(`ens224`); HOME_NET
 > service account for programmatic access the least-privilege way. Phase 1
 > evidence is captured from operator-run output.
 
+**`so-test` run (2026-07-05, screenshot `phase1-so-test.png`):** replayed sample
+PCAPs at 10 Mbps **onto the monitor interface `bond0`** — 111,557 packets /
+4,102 flows sent in 10.38 s; 55,748 successful, **0 failed**, 0 truncated,
+0 retried; "Replay completed." This confirms traffic reached the monitor NIC.
+**Next — confirm the sensors detected it:** check SOC → **Alerts** (Suricata) and
+**Hunt** (Zeek) for events from this window; that indexed-events check is the
+actual Gate 1 sensor criterion.
+
 **Result:** ✅ `so-status` clean — all 23 containers `running` (screenshot
 `phase1-so-status.png`): so-dockerregistry, so-elastalert, so-elastic-fleet,
 so-elastic-fleet-package-registry (healthy), so-elasticsearch, so-influxdb
@@ -103,7 +111,9 @@ sensor events (monitor NIC currently sees no traffic)._
 
 **Screenshots** (save under `evidence/screenshots/`, reference by filename):
 - `phase1-so-status.png` — ✅ captured (all containers running)
+- `phase1-so-test.png` — ✅ captured (PCAP replay onto bond0, 0 failed)
 - `phase1-soc-console-login.png` — _pending_
+- `phase1-alerts-from-so-test.png` — _pending (Suricata/Zeek events from the replay)_
 - `phase1-grid-view.png` — _pending_
 - `phase1-hunt-zeek-suricata-events.png` — _pending_
 
