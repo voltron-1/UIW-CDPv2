@@ -17,9 +17,11 @@ References: [execution-runbook.md](../docs/migration/execution-runbook.md) (Phas
 - **Next gate: Gate 2.** Phase 2 proves SO's native telemetry matches or beats the
   legacy ELK pipeline, in ECS, with acceptable ingest lag — while the old stack
   stays live (golden rule 1, parallel-run).
-- **Entry blocker:** the monitor NIC (`bond0`/`ens224`) still has **no live
-  traffic**. Phase 1's sensor evidence came from `so-test` replay; Phase 2 begins
-  by feeding the monitor NIC *real* traffic (#167).
+- **Entry step:** get simulated traffic to the sensor on `bond0`/`ens224` (#167).
+  This is a **development environment — all sensor traffic is simulated**
+  (`so-test`/`tcpreplay` or the sim scripts); there is no production feed and none
+  is expected. Phase 1 used `so-test` replay; Phase 2 formalizes the injection
+  method so both SO and legacy ELK observe the same simulated activity.
 - **Standing prerequisite for parity:** the legacy ELK stack (sibling repo
   `voltron-1/Suburban_SOC`) must be **running concurrently** — the Gate 2 parity
   check (#171) compares SO against it. Confirm it is up before P2.5.
@@ -34,7 +36,7 @@ logs to its issue **and** to `docs/migration/evidence/phase-2.md` (new).
 
 | Step | Issue | Owner | Entry | Exit |
 |---|---|---|---|---|
-| **A1 — Feed the monitor NIC real traffic** | [#167](https://github.com/voltron-1/UIW-CDPv2/issues/167) `[P2.1]` | `[HUMAN]` + Ishmael | Grid up | Lab traffic reaches `ens224`; a **live** (non-replay) benign flow appears in Hunt as Zeek + Suricata events. **VMware note:** no physical switch SPAN — put lab endpoints + `ens224` on the same segment with **promiscuous mode enabled**, or bridge `ens224` to a physical mirror port. Resolve HOME_NET (`10.18.81.0/24`) so the monitored segment actually is HOME_NET (currently management is `192.168.126.0/24`). |
+| **A1 — Get simulated traffic to the sensor** | [#167](https://github.com/voltron-1/UIW-CDPv2/issues/167) `[P2.1]` | `[HUMAN]` + Ishmael | Grid up | Simulated activity reaches `ens224` and appears in Hunt as Zeek + Suricata events. **Dev methods:** replay pcaps onto `ens224` (`so-test`/`tcpreplay`), or run the sims on a VMware segment with **promiscuous mode enabled** that the NIC observes (needed for A5 parity, so legacy ELK's sensor sees the same flows). Resolve HOME_NET (`10.18.81.0/24`) to match the segment the sims run on (management is `192.168.126.0/24`). |
 | **A2 — Enroll endpoints (Elastic Agent/Fleet)** | [#168](https://github.com/voltron-1/UIW-CDPv2/issues/168) `[P2.2]` | `[HUMAN]` | Grid up (parallel to A1) | ≥1 Windows (Sysmon: process + command line, PowerShell, auth) and ≥1 Linux endpoint enrolled via Fleet; host events landing in ES. Satisfies #6 / #125 (D-13) natively. |
 | **A3 — Spot-check ECS normalization** | [#169](https://github.com/voltron-1/UIW-CDPv2/issues/169) `[P2.3]` | `[HUMAN]` | A1 + A2 producing events | A Zeek `conn` event and a Windows process event show **ECS field names** (`source.ip`, `destination.ip`, `process.command_line`, `host.name`, …). Verifies #123 (D-11) is native. |
 | **A4 — Sensor/agent heartbeat** | [#170](https://github.com/voltron-1/UIW-CDPv2/issues/170) `[P2.4]` | `[HUMAN]` | A1 + A2 | SOC → Grid shows sensor + agent health; stop a shipper and confirm the native dead-shipper alarm fires (#126 / D-14). |
@@ -89,8 +91,10 @@ never proceed to detection work on a grid that isn't seeing data.
 
 ## §6 Risks
 
-- **VMware "SPAN" fidelity** — promiscuous-mode shared segment ≠ a real switch
-  SPAN; document the method and its limits in the evidence.
+- **Simulated-traffic method** — dev environment, no production SPAN by design;
+  pick and document the injection method (replay onto the NIC vs. flows on a
+  promiscuous segment). Flows-on-a-segment is required for A5 parity so both
+  stacks' sensors see the same activity.
 - **Endpoints must exist** — A2 needs at least one Windows (with Sysmon) and one
   Linux lab endpoint; build them if absent.
 - **Legacy ELK availability** — A5 parity is impossible if `Suburban_SOC` isn't

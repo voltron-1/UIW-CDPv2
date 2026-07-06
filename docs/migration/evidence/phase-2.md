@@ -13,25 +13,31 @@ verbatim): SO telemetry ≥ old-ELK telemetry for the parity window · ECS confi
 heartbeat visible · ingest lag within SLO · **old ELK still live**.
 
 **Prerequisites carried in from Phase 1:**
-- Monitor NIC `bond0`/`ens224` has **no live source** — A1 wires it (VMware:
-  promiscuous-mode shared segment, not a physical SPAN).
-- **HOME_NET** `10.18.81.0/24` must equal the monitored segment (management is
-  `192.168.126.0/24`) — resolve before/at A1.
+- **Traffic is simulated by design** — this is a development environment with no
+  production feed, and none is expected. A1 gets simulated traffic to the sensor
+  on `bond0`/`ens224`: replay pcaps onto the interface (`so-test`/`tcpreplay`) or
+  run the sims on a promiscuous segment the NIC observes.
+- **HOME_NET** `10.18.81.0/24` must equal the segment the sims run on (management
+  is `192.168.126.0/24`) — resolve before/at A1.
 - **Legacy ELK** (`voltron-1/Suburban_SOC`) must be **running** for the A5 parity
   comparison.
 - Lab endpoints (≥1 Windows w/ Sysmon, ≥1 Linux) for A2 enrollment.
 
 ---
 
-## A1 — Feed the monitor NIC real traffic ([#167](https://github.com/voltron-1/UIW-CDPv2/issues/167))
+## A1 — Get simulated traffic to the sensor ([#167](https://github.com/voltron-1/UIW-CDPv2/issues/167))
 
-- [ ] Monitored segment reaches `ens224` (promiscuous vSwitch / bridged mirror)
-- [ ] HOME_NET aligned with the monitored segment
-- [ ] A **live** (non-`so-test`) benign flow appears in SOC → Hunt as **Zeek** and
-      **Suricata** events
+Dev environment — traffic is simulated, not real. Two workable injection methods:
+replay pcaps onto `ens224` (`so-test`/`tcpreplay`), or run the sims on a
+promiscuous segment the monitor NIC observes (better exercises the capture path,
+and lets the legacy ELK sensor see the same activity for A5 parity).
 
-**Result:** _PENDING — record the SPAN/mirror method and paste a Hunt screenshot
-of live (non-replay) events (`phase2-live-traffic-hunt.png`)._
+- [ ] Chosen injection method produces flows the sensor captures
+- [ ] HOME_NET aligned with the segment the sims run on
+- [ ] Simulated benign activity appears in SOC → Hunt as **Zeek** and **Suricata** events
+
+**Result:** _PENDING — record the injection method and paste a Hunt screenshot of
+the simulated events (`phase2-sim-traffic-hunt.png`)._
 
 ---
 
