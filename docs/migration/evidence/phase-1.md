@@ -2,9 +2,9 @@
 
 **Milestone:** M2 / [#10](https://github.com/voltron-1/UIW-CDPv2/issues/10) ·
 **Gate:** Gate 1 · **Started:** 2026-07-05 · **Status:** ⏳ In progress —
-ISO verified (A1) and SO Standalone installed on a VMware Workstation VM (A2);
-awaiting `so-status` / SOC-console validation (A3). Sensor-events criterion is
-blocked on the monitor NIC having no live traffic (test/SPAN traffic needed).
+ISO verified (A1), SO Standalone installed (A2), **`so-status` green (A3, host
+`cardinal-so`)**. Remaining for Gate 1: confirm SOC-console login, and get
+sensor events (monitor NIC has no live traffic yet).
 
 > Golden rule 4: every gate produces evidence here — command output, screenshots
 > by filename, issue links. This file is the capstone-demo record for Phase 1.
@@ -75,17 +75,25 @@ Management `ens160` = 192.168.126.128/24; monitor `bond0`(`ens224`); HOME_NET
 
 ## A3 — Validate grid provisioning ([#165](https://github.com/voltron-1/UIW-CDPv2/issues/165))
 
-- [ ] `sudo so-status` — all services green (may take a while on 4 vCPU)
+- [x] `sudo so-status` — all services green (host `cardinal-so`, 2026-07-05)
 - [ ] SOC console reachable over HTTPS (`https://192.168.126.128`); login works
 - [ ] Default **Zeek** and **Suricata** telemetry landing (SOC → Grid, and the
       Hunt / Dashboards views show live events) — **needs traffic on the monitor
       NIC**: with no live source, generate test traffic on the monitored segment
       or attach `ens224` to a promiscuous vSwitch; full SPAN wiring is Phase 2 / #167.
 
-**Result:** _PENDING — paste `so-status` output; list screenshots below._
+**Result:** ✅ `so-status` clean — all 23 containers `running` (screenshot
+`phase1-so-status.png`): so-dockerregistry, so-elastalert, so-elastic-fleet,
+so-elastic-fleet-package-registry (healthy), so-elasticsearch, so-influxdb
+(healthy), so-kibana, so-kratos, so-logstash, so-nginx (healthy), so-postgres
+(healthy), so-redis, so-sensoroni, so-soc, so-strelka-{backend,coordinator,
+filestream,frontend,gatekeeper,manager}, so-suricata, so-telegraf, so-zeek
+(healthy). Banner: "This onion is ready to make your adversaries cry!"
+_Remaining for A3: confirm SOC-console HTTPS login, and get sensor events
+(monitor NIC currently sees no traffic)._
 
 **Screenshots** (save under `evidence/screenshots/`, reference by filename):
-- `phase1-so-status.png` — _pending_
+- `phase1-so-status.png` — ✅ captured (all containers running)
 - `phase1-soc-console-login.png` — _pending_
 - `phase1-grid-view.png` — _pending_
 - `phase1-hunt-zeek-suricata-events.png` — _pending_
