@@ -76,7 +76,8 @@ Management `ens160` = 192.168.126.128/24; monitor `bond0`(`ens224`); HOME_NET
 ## A3 — Validate grid provisioning ([#165](https://github.com/voltron-1/UIW-CDPv2/issues/165))
 
 - [x] `sudo so-status` — all services green (host `cardinal-so`, 2026-07-05)
-- [ ] SOC console reachable over HTTPS (`https://192.168.126.128`); login works
+- [x] SOC console reachable over HTTPS (`https://192.168.126.128`); login works
+      — operator-confirmed 2026-07-05
 - [ ] Default **Zeek** and **Suricata** telemetry landing (SOC → Grid, and the
       Hunt / Dashboards views show live events) — **needs traffic on the monitor
       NIC**: with no live source, generate test traffic on the monitored segment
@@ -89,8 +90,8 @@ so-elastic-fleet-package-registry (healthy), so-elasticsearch, so-influxdb
 (healthy), so-redis, so-sensoroni, so-soc, so-strelka-{backend,coordinator,
 filestream,frontend,gatekeeper,manager}, so-suricata, so-telegraf, so-zeek
 (healthy). Banner: "This onion is ready to make your adversaries cry!"
-_Remaining for A3: confirm SOC-console HTTPS login, and get sensor events
-(monitor NIC currently sees no traffic)._
+SOC-console HTTPS login operator-confirmed. _Remaining for A3 / Gate 1: get
+sensor events (monitor NIC currently sees no traffic)._
 
 **Screenshots** (save under `evidence/screenshots/`, reference by filename):
 - `phase1-so-status.png` — ✅ captured (all containers running)
