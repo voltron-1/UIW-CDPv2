@@ -12,12 +12,12 @@ legacy ELK sensors, and confirm **SO ≥ ELK** for the window.
 
 | | **PCAP replay** (recommended for parity) | **Live flows on a segment** |
 |---|---|---|
-| Script | `capture_parity_pcap.sh` + `replay_parity_pcap.sh` | `run_parity_window.sh` |
-| How | Capture the sims once → replay the **identical pcap** into each sensor | Run the sims live on a promiscuous segment both sensors watch |
+| Script | `capture_parity_pcap.sh` → `rewrite_pcap.sh` → `replay_parity_pcap.sh` | `run_parity_window.sh` |
+| How | Capture the sims once → remap into HOME_NET → replay the **identical pcap** into each sensor | Run the sims live on a promiscuous segment both sensors watch |
 | Determinism | **High** — same bytes into both stacks; any delta is the pipeline | Lower — each sensor sees its own copy of a live run |
 | VMware setup | Minimal — replay onto each monitor NIC; no shared segment needed | Needs a promiscuous vSwitch/segment both sensors observe |
 | Reaches both stacks | Yes — replay the same file on each host | Only if both sensors are on the same monitored segment |
-| Suricata fidelity | Depends on captured addresses (see note) | Real segment addresses |
+| Suricata fidelity | HOME_NET-normalized via `rewrite_pcap.sh` (no reinstall / real 10.x net) | Real segment addresses |
 | Best for | **Parity** (A5), ECS spot-check (A3), ingest lag (A6) | Realistic end-to-end when a shared segment exists |
 
 Both reuse the existing sims (`sim_portscan.sh`, `sim_brute_ssh.sh`) — neither
@@ -26,25 +26,30 @@ reinvents the activity.
 ## Method A — PCAP replay (deterministic)
 
 ```bash
-# 1. Capture the canonical activity ONCE (anywhere the sims run; even lo/localhost).
-#    For Suricata HOME_NET fidelity, target a host on the monitored segment.
-PARITY_TARGET=10.18.81.50 CAPTURE_IFACE=eth0 ./capture_parity_pcap.sh
+# 1. Capture the canonical activity ONCE, on a real interface against a
+#    NON-loopback target (so src != dst). The capture's address range doesn't
+#    matter yet — step 2 remaps it.
+PARITY_TARGET=192.168.126.200 CAPTURE_IFACE=ens160 ./capture_parity_pcap.sh
 #    -> writes pcaps/parity-<stamp>.pcap
 
-# 2. Replay the SAME pcap into each stack, on that stack's sensor host:
-#    Security Onion grid:
-REPLAY_MODE=so-tcpreplay STACK_LABEL=SO  PCAP=pcaps/parity-<stamp>.pcap ./replay_parity_pcap.sh
-#    Legacy ELK sensor:
-REPLAY_MODE=tcpreplay REPLAY_IFACE=<mon> STACK_LABEL=ELK PCAP=pcaps/parity-<stamp>.pcap ./replay_parity_pcap.sh
+# 2. Remap the addresses into HOME_NET so Suricata's rules match on replay:
+MATCH_CIDR=192.168.126.0/24 HOME_NET_CIDR=10.18.81.0/24 \
+  ./rewrite_pcap.sh pcaps/parity-<stamp>.pcap pcaps/parity-<stamp>-homenet.pcap
+
+# 3. Replay the SAME rewritten pcap into each stack, on that stack's sensor host:
+REPLAY_MODE=so-tcpreplay STACK_LABEL=SO  PCAP=pcaps/parity-<stamp>-homenet.pcap ./replay_parity_pcap.sh
+REPLAY_MODE=tcpreplay REPLAY_IFACE=<mon> STACK_LABEL=ELK PCAP=pcaps/parity-<stamp>-homenet.pcap ./replay_parity_pcap.sh
 #    (legacy alternative: REPLAY_MODE=zeek — `zeek -r <pcap>` offline)
 
-# 3. Count events per stack for each printed window; fill pcap-parity-results-template.md.
+# 4. Count events per stack for each printed window; fill pcap-parity-results-template.md.
 ```
 
-**Address note:** a pcap captured against localhost/off-segment still gives a valid
-**Zeek `conn` volume** comparison, but Suricata rules keyed to HOME_NET
-(`10.18.81.0/24`) won't match loopback addresses — capture against a
-monitored-segment target for Suricata fidelity.
+**Why the rewrite (step 2):** replayed packets carry whatever addresses you
+captured. `rewrite_pcap.sh` maps them into HOME_NET (`10.18.81.0/24`, host bits
+preserved) with `tcprewrite --pnat` + checksum fix, so Suricata's HOME_NET rules
+fire — **without reinstalling SO or putting the grid on a real 10.x network.**
+Capture against a **non-loopback** target so src ≠ dst; a localhost capture can't
+be split into attacker/target and needs DLT→Ethernet conversion (`TO_ETHERNET=1`).
 
 ## Method B — Live flows on a segment
 

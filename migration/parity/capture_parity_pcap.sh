@@ -80,8 +80,13 @@ fi
 
 cat <<MSG
 
-Next — replay the SAME pcap into both stacks (identical packets), on each host:
-  SO grid:    REPLAY_MODE=so-tcpreplay STACK_LABEL=SO  PCAP="$OUT" ./replay_parity_pcap.sh
-  legacy ELK: REPLAY_MODE=tcpreplay REPLAY_IFACE=<mon-iface> STACK_LABEL=ELK PCAP="$OUT" ./replay_parity_pcap.sh
-Then count events per stack for each replay window and fill pcap-parity-results-template.md.
+Next:
+  1. If captured outside HOME_NET, normalize the addresses into it (so Suricata
+     rules match) — no SO reinstall / real 10.x network needed:
+       MATCH_CIDR=<capture-net>/24 HOME_NET_CIDR=10.18.81.0/24 \\
+         ./rewrite_pcap.sh "$OUT" "${OUT%.pcap}-homenet.pcap"
+  2. Replay the SAME (rewritten) pcap into both stacks — identical packets — on each host:
+       SO grid:    REPLAY_MODE=so-tcpreplay STACK_LABEL=SO  PCAP=<homenet.pcap> ./replay_parity_pcap.sh
+       legacy ELK: REPLAY_MODE=tcpreplay REPLAY_IFACE=<mon-iface> STACK_LABEL=ELK PCAP=<homenet.pcap> ./replay_parity_pcap.sh
+  3. Count events per stack for each replay window and fill pcap-parity-results-template.md.
 MSG
