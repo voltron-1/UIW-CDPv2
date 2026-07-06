@@ -68,7 +68,7 @@ Depends on A1 verified **and** the Target Host / NIC Layout / HOME_NET values in
       management interface** (`ens160`)
 - [x] Set **HOME_NET** to the lab subnet CIDR(s) — `10.18.81.0/24`
 
-**Result:** ✅ Installed on a VMware Workstation Pro VM (4 vCPU / 32 GB / 200 GB).
+**Result:** ✅ Installed on a VMware Workstation Pro VM (12 vCPU / 32 GB / 200 GB).
 Management `ens160` = 192.168.126.128/24; monitor `bond0`(`ens224`); HOME_NET
 10.18.81.0/24. **Caveat:** monitor NIC has no live traffic source yet.
 

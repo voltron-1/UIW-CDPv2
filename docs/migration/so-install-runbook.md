@@ -18,10 +18,9 @@ Phase 1 (grid stand-up) begins. Gate 0 requires zero unfilled TODOs here.
 
 - Make/model or VM spec: VMware Workstation Pro VM (guest OS: Oracle Linux 9,
   installed from the SO 3.1 ISO)
-- CPU / RAM / disk allocated to the SO Standalone install: 4 vCPU / 32 GB RAM /
-  200 GB disk — 32 GB is comfortable; 4 vCPU and 200 GB sit at SO's documented
-  Standalone minimums, so expect slow first-boot convergence and limited
-  retention headroom.
+- CPU / RAM / disk allocated to the SO Standalone install: 12 vCPU / 32 GB RAM /
+  200 GB disk — 12 vCPU and 32 GB are comfortable for Standalone; 200 GB disk
+  sits at SO's documented minimum, so retention headroom is limited.
 - Physical location / rack or hypervisor host: VMware Workstation Pro on the lab
   workstation
 
