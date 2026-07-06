@@ -1,6 +1,6 @@
 # ADR-001: Migrate UIW-CDP from hand-built ELK stack to Security Onion 3.1
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-07-05 — Gate 0 approved 2026-07-03; scaffold merged via PR #155)
 - **Date:** 2026-07-02
 - **Deciders:** Tommy Lammers (Lead Architect), Sterling Garnett (Security Analyst), Ishmael Pendleton (Network Engineer)
 - **Tracking:** Seeds the ADR log required by issue #150 (D-38)

@@ -1,5 +1,9 @@
 # Board Structure Proposal — Security Onion Migration
 
+> **Erratum (2026-07-05):** GitHub Project #13 has since been renamed from
+> "UIW CDPv2" to **"CARDINAL — SO 3.1 Migration"**. References to the old
+> title below are preserved as the point-in-time record.
+
 **Status: CREATED.** Approved by Tommy 2026-07-03 and created in one `gh`
 pass the same day. Milestones #9–#14, task issues #156–#193 (mapping table
 at the bottom of this doc). Assignee on every task issue is `voltron-1`,
