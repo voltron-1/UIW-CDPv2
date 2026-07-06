@@ -76,18 +76,21 @@ Verifies SO does natively what #123 / D-11 asked us to build.
 
 ## A5 — Parity check vs. legacy ELK ([#171](https://github.com/voltron-1/UIW-CDPv2/issues/171))
 
-Run the fixed activity set (`migration/parity/run_parity_window.sh`) on the
-monitored segment while **both** SO and legacy ELK are live; count events per
-activity in the same window and confirm **SO ≥ ELK**. Log deltas here and in
+Confirm **SO ≥ ELK** while both stacks are live. Two harness methods
+(`migration/parity/`): **pcap replay** (recommended — capture the sims once, replay
+the identical pcap into each sensor for a deterministic comparison) or **live
+flows** on a shared promiscuous segment. Log deltas here and in
 `integration-inventory.md`.
 
-| Activity | Window (UTC) | Legacy ELK count | SO count | Δ | SO ≥ ELK? |
+| Stack | Method | Window (UTC) | Zeek events | Suricata events | Total |
 |---|---|---|---|---|---|
-| Port scan (`sim_portscan.sh`) | _pending_ | | | | |
-| SSH brute (`sim_brute_ssh.sh`) | _pending_ | | | | |
+| Legacy ELK | _pending_ | _pending_ | | | |
+| Security Onion | _pending_ | _pending_ | | | |
 
-**Result:** _PENDING — attach the completed parity results file
-(`migration/parity/parity-results-template.md` copy)._
+**Δ (SO − ELK):** _pending_ · **SO ≥ ELK?** _pending_
+
+**Result:** _PENDING — attach the completed results file (`pcap-parity-results-template.md`
+or `parity-results-template.md` copy)._
 
 ---
 
