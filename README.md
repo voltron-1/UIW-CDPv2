@@ -134,8 +134,15 @@ and the migration work.
 | SLO / reporting scripts | `slo_metrics.py`, `weekly_ciso_report.py` | Re-pointed, TLS + least-priv, egress governance | Keep + re-point | 4 |
 | LLM analysis | Ollama (local) | Ollama, telemetry-stays-on-campus verified | Keep | 4 |
 | Emulation | Adversary-in-a-Box | Drives the Phase 5 kill-chain validation | Keep | 5 |
-| Duplicate SOAR engine | `scripts/hive-mind-broker/` | *(removed — single SOAR path)* | Retire | 4 |
+| Router-block containment tier | `scripts/hive-mind-broker/` — present in-repo, not yet wired into compose | Deployed on `soc-mesh-net`; executes the approved, HMAC-signed nftables router blocks the agent dispatches | Keep + integrate | 4 |
 | Watcher placeholders | `rules/elastic_watcher/` | *(superseded by SO Detections)* | Retire | 4 |
+
+> **Router-block tier status (#94):** `hive-mind-broker` is present in-repo and the
+> agent already dispatches HMAC-signed blocks to it, but the integration is **not
+> complete** — it has no `docker-compose` service, `BROKER_URL` / `HIVE_MIND_SECRET`
+> are not templated in `.env.example`, the agent's dispatch endpoint does not yet
+> match the broker's, and the two keep separate approval queues. Completion is
+> tracked in **#94** and sequenced into the Phase 4 SOAR re-point (**#181**).
 
 Retirement of the legacy stack is **destructive and last**: it happens only in
 Phase 5, only after a passing gate, and only after a final snapshot.
@@ -306,7 +313,7 @@ explicitly out of scope:
 │   └── elastic_watcher/          # Legacy Watcher rules (retiring — superseded by SO)
 ├── scripts/                      # Automation, SOAR agents, setup
 │   ├── agile/                    # GitHub CLI board management + framework scripts
-│   ├── hive-mind-broker/         # Legacy containment broker (retiring — duplicate SOAR)
+│   ├── hive-mind-broker/         # Router-block containment tier (integrating — #94, Phase 4)
 │   ├── setup/                    # Provisioning + docker-compose.yml
 │   │   └── ai_agent/             # SOAR Response Agent, slo_metrics, weekly_ciso_report
 │   └── wiki/                     # build_wiki.py (wiki-sync generator)

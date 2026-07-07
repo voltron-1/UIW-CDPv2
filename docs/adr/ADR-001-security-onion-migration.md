@@ -8,7 +8,7 @@
 ## Context
 
 UIW-CDP currently runs a hand-built detection stack: Zeek → Filebeat → Logstash →
-Elasticsearch 8.x → Kibana, plus original capstone components — a Python Flask
+Elasticsearch 9.3.2 → Kibana, plus original capstone components — a Python Flask
 SOAR agent with HMAC-SHA256-authenticated endpoints, an HDI/self-critique
 orchestrator, and an Ollama local-LLM analysis layer.
 
