@@ -96,16 +96,54 @@ or `parity-results-template.md` copy)._
 
 ## A6 — Re-measure ingest lag ([#172](https://github.com/voltron-1/UIW-CDPv2/issues/172))
 
-Measure SO end-to-end lag (`@timestamp` − event time) on a known event class;
-compare to the legacy breach (**~23,662 s vs 300 s SLO**). The delta is capstone
-evidence.
+Measure SO end-to-end ingest lag on a known event class; compare to the legacy
+breach (**~23,662 s vs 300 s SLO**). The delta is capstone evidence.
+
+**Event class (defined up front):**
+- **Primary — Zeek `conn`** (`event.module:zeek` / `event.dataset:conn`) from the
+  A1 sensor path. Same network pipeline Phase 2 validates, same class the legacy
+  breach was measured against, and A1 traffic generates it continuously (good
+  sample size).
+- **Secondary (diagnostic) — an Elastic Agent process event** (`event.module`
+  `windows`/`system`) via Fleet — a *different* pipeline (mgmt network → Fleet →
+  ES), so lag can be compared per-pipeline, not just in aggregate.
+
+**Formula (ECS, decomposed so a breach is diagnosable):**
+- end-to-end = `event.ingested − @timestamp`  ← **headline vs the 300 s SLO**
+- collection = `event.created − @timestamp`  (source → shipper/agent)
+- index = `event.ingested − event.created`  (shipper → indexed in ES)
+
+`event.ingested` is stamped by the ES ingest pipeline at index time (best
+"queryable in the store" proxy); `@timestamp` is when the event occurred.
+
+**Method (repeatable) — helper: [`migration/parity/ingest_lag.py`](../../../migration/parity/ingest_lag.py):**
+1. In SOC → Hunt (or Kibana Discover) scope to the event class over a fixed recent
+   window (e.g. the 15 min after an A1 injection). Add `@timestamp`,
+   `event.created`, `event.ingested` as columns.
+2. Download/export the result set as NDJSON.
+3. `python3 migration/parity/ingest_lag.py --format md <export>.ndjson` →
+   emits the Security-Onion column below and exits **0 = within SLO / 1 = breach**
+   (median AND p95 must fit). Reports collection/index legs too, so a breach
+   points at collection vs. transport.
+4. **Fallback** (if `event.ingested` isn't exposed in the console): note UTC
+   `T_inject` at A1 start, watch Hunt for first appearance `T_visible`; lag ≈
+   `T_visible − T_inject` (coarse single-sample upper bound — record both).
+5. **Phase-4 upgrade:** once P4.1 provisions the read-only ES account, pipe an ES
+   query's `_source` lines straight into `ingest_lag.py` for large-sample,
+   automated median/p95 — no manual export.
+
+Direct SO ES querying stays **deferred to Phase 4** (P4.1); until then A6 reads
+from the console export, consistent with `migration/parity/README.md`.
 
 | Metric | Legacy ELK | Security Onion |
 |---|---|---|
-| Median ingest lag (event class: _TBD_) | ~23,662 s (breach) | _pending_ |
+| Median end-to-end lag (event class: Zeek `conn`) | ~23,662 s (breach) | _pending_ |
+| p95 end-to-end lag | — | _pending_ |
+| Max end-to-end lag | — | _pending_ |
 | Within 300 s SLO? | ✗ | _pending_ |
 
-**Result:** _PENDING — record method + measured lag._
+**Result:** _PENDING — run the method above; paste the `--format md` table and note
+the exit-code verdict + the event class/window used._
 
 ---
 

@@ -74,6 +74,23 @@ Count the window in **both** stacks (SO: Hunt/Alerts by `event.module:zeek` /
 `event.module:suricata`; ELK: `logstash-security-*`), confirm **SO ≥ ELK**, and
 copy the table into [`../../docs/migration/evidence/phase-2.md`](../../docs/migration/evidence/phase-2.md).
 
+## Ingest lag (A6 / [#172](https://github.com/voltron-1/UIW-CDPv2/issues/172))
+
+`ingest_lag.py` computes SO end-to-end ingest lag (`event.ingested − @timestamp`,
+plus the collection/index legs) from **exported NDJSON** and checks it against the
+300 s SLO — the metric legacy ELK breached at ~23,662 s. It talks to no ES
+(stdlib only), so it runs before the Phase-4 read-only account exists:
+
+```bash
+# From a SOC-console export of a fixed window (event class = Zeek conn):
+python3 ingest_lag.py --format md hunt-export.ndjson   # exit 0 = within SLO, 1 = breach
+# Phase 4 (once P4.1 lands the ES account): pipe query _source lines straight in:
+some_es_query | python3 ingest_lag.py
+```
+
+Method and event-class definition: [`../../docs/migration/evidence/phase-2.md`](../../docs/migration/evidence/phase-2.md) (A6).
+Tests: `python3 test_ingest_lag.py`.
+
 ## Not automated here (by design)
 
 Querying **SO's** Elasticsearch is **deferred to Phase 4** (P4.1 provisions a
