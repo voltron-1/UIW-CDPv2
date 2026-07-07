@@ -12,6 +12,14 @@
 
 This SOP defines the end-to-end procedure for validating that the Suburban-SOC pipeline correctly detects three canonical attack scenarios and that the SOAR layer (Kibana Watcher → AI Agent → `isolate.sh` → OpenWrt `uci`) responds at machine-speed by quarantining the offending device's MAC address.
 
+> **Containment path is being consolidated (#94).** This SOP documents the original
+> single-host model — the agent SSHes to the OpenWrt router and runs `isolate.sh` for
+> a MAC-based `uci` quarantine. In the current code (`scripts/setup/ai_agent/agent_app.py`)
+> the agent runs in a slim container with no ssh/sudo and instead dispatches an
+> HMAC-signed router block to the `hive-mind-broker` (IP-based nftables). The end-state
+> containment mechanism is being reconciled under **#94** and the Phase 4 SOAR re-point
+> (**#181**); update this procedure when that integration lands.
+
 It complements **SOP-001** (pipeline operations); SOP-001 brings the detection plane up, SOP-022 proves it works.
 
 ---

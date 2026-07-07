@@ -1,7 +1,7 @@
 # HDI/Self-Critique Orchestrator Re-integration
 
 Re-integration goal: re-point the HDI/self-critique orchestrator (and its
-Ollama local-LLM layer) from the legacy self-managed Elasticsearch 8.x to
+Ollama local-LLM layer) from the legacy self-managed Elasticsearch 9.3.2 to
 Security Onion 3.1's Elasticsearch surface.
 
 Access is via a **dedicated least-privilege service account** created for the

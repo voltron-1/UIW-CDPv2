@@ -86,7 +86,7 @@ APPROVAL_QUEUE = os.environ.get(
 )
 _queue_lock = threading.Lock()
 
-# Hive-Mind broker — the router-block dispatcher (#109). The agent runs in a slim
+# Hive-Mind broker — the router-block dispatcher (#94). The agent runs in a slim
 # container with no ssh/sudo, so it can't run isolate.sh against a router itself.
 # Instead it routes containment to the broker over an authenticated (HMAC) webhook;
 # the broker owns the per-tenant router inventory and executes the block.
@@ -147,7 +147,7 @@ def _tenant_env_suffix(tenant: str) -> str:
 
 
 def dispatch_block_via_broker(attacker_ip: str, tenant: str, source_mac: str = ""):
-    """Route an approved containment to the hive-mind-broker (#109).
+    """Route an approved containment to the hive-mind-broker (#94).
 
     The agent's slim container has no ssh/sudo, so it cannot run isolate.sh against
     a router. The broker can: it owns the per-tenant router inventory and applies an

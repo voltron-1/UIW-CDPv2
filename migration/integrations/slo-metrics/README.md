@@ -1,7 +1,7 @@
 # SLO Metrics Re-integration
 
 Re-integration goal: re-point SLO metrics collection (detection latency,
-pipeline health, triage SLOs) from the legacy self-managed Elasticsearch 8.x
+pipeline health, triage SLOs) from the legacy self-managed Elasticsearch 9.3.2
 to Security Onion 3.1's Elasticsearch surface.
 
 Access is via a **dedicated least-privilege service account** created for
