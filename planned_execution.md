@@ -8,7 +8,7 @@
 >
 > Markers: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (by a dependency)
 > Update cadence: adjust markers in the same PR that closes/advances the items.
-> Last reconciled against GitHub: **2026-07-06**.
+> Last reconciled against GitHub: **2026-07-07**.
 
 ---
 
@@ -24,12 +24,14 @@ network, independent of the monitor NIC.
 
 ---
 
-## LAST SESSION (2026-07-05 → 06)
+## LAST SESSION (2026-07-07)
 
-- **PR #197** merged — README truth pass + Phase 1 kickoff plan; closed **#196**; ADR-001 → Accepted.
-- **PR #198** merged — Phase 1 grid stand-up on dev VM `cardinal-so`: **Gate 1 MET**; closed **#160, #163–#166**. Evidence: [`docs/migration/evidence/phase-1.md`](docs/migration/evidence/phase-1.md).
-- **PR #199** merged — Phase 2 kickoff plan + Gate 2 evidence scaffold + parity harness (capture → `tcprewrite` HOME_NET normalization → replay).
-- Board renamed **"CARDINAL — SO 3.1 Migration"** (project #13); erratum recorded in board-structure-proposal.
+- **PR #201** merged — `[P2.6]` #172 ingest-lag helper + A6 measurement method landed on `main` (`migration/parity/ingest_lag.py`, `test_ingest_lag.py`). The re-measurement itself still awaits #167 traffic.
+- **PR #202** merged — audit-remediation doc-truth pass: reconciled the `hive-mind-broker` docs↔code contradiction (README row/tree + SOP-022 note), corrected the Elasticsearch legacy-version drift → **9.3.2** (ADR-001 + 3 re-point stubs), fixed stale `(#109)`→`(#94)` code refs.
+- **#94 reframed** → *"hive-mind-broker is the agent's router-block tier — integrate & deploy (not remove)"*: disposition **KEEP + INTEGRATE**; build (compose service, secret templating, `/webhook/dispatch` contract, single approval surface, tests #96) sequenced into **Phase 4 / #181**. Two new breakages recorded: endpoint mismatch + dual-approval split-brain.
+
+### Prior (2026-07-05 → 06)
+- **PR #197 / #198 / #199** merged — README truth pass (ADR-001 → Accepted, closed #196); Phase 1 grid stand-up on dev VM `cardinal-so` (**Gate 1 MET**, closed #160, #163–#166); Phase 2 kickoff + Gate 2 evidence scaffold + parity harness. Board renamed **"CARDINAL — SO 3.1 Migration"** (project #13).
 
 ---
 
@@ -74,7 +76,7 @@ Execution:
 - [ ] `[P2.3]` #169 ECS spot-check (Zeek `conn` + Windows process) — after #167/#168 produce events
 - [ ] `[P2.4]` #170 Sensor/agent heartbeat + dead-shipper alarm — after #167/#168
 - [ ] `[P2.5]` #171 Parity check vs legacy ELK — needs #167–#170 **and legacy ELK (`Suburban_SOC`) running**; use the `migration/parity/` pcap path
-- [ ] `[P2.6]` #172 Re-measure ingest lag (legacy breach ~23,662 s vs 300 s SLO) — after #167
+- [~] `[P2.6]` #172 Re-measure ingest lag (legacy breach ~23,662 s vs 300 s SLO) — helper + A6 method landed (PR #201); re-measurement pending #167 traffic
 
 ## Phase 3 — Detection migration (M4 · milestone #12) — (0/7)
 
