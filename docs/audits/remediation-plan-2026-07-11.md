@@ -177,7 +177,7 @@
 
 **Files:** `scripts/setup/docker-compose.yml`, `scripts/setup/ai_agent/Dockerfile`.
 
-**Contains:** `port-binding-agent-broker` (high), `container-user-privilege` (high), `NEW-compose-availability-hardening` (low, `mem_limit` only remaining).
+**Contains:** `port-binding-agent-broker` (high), `container-user-privilege` (high — **DONE**, pulled forward to `fix/workstream-c-ci-security-gates` 2026-07-11: Workstream C's new Trivy IaC gate (`security-scan.yml`) caught `DS-0002` on `ai_agent/Dockerfile` immediately, so item 2 below was fixed on the spot rather than left red pending a full Workstream G pass; build-and-run verified locally, non-root `appuser` confirmed via `id`), `NEW-compose-availability-hardening` (low, `mem_limit` only remaining).
 
 **Fix approach:**
 1. Change the agent's compose port mapping from `"5000:5000"` to `"127.0.0.1:5000:5000"` (loopback-only), and add a compose service definition for the broker with the same loopback confinement once/if UIW #94/#181 decides to integrate it.
