@@ -68,8 +68,11 @@ echo "[*] Connecting to OpenWrt router at $OPENWRT_HOST..."
 # --- Execute uci firewall rule injection via SSH (idempotent) ---
 # If a SOAR_QUARANTINE rule with the same name already exists, skip the
 # add+restart cycle. Avoids accumulating duplicate uci rules on re-fires.
+# StrictHostKeyChecking=accept-new pins the router key on first contact and then
+# refuses a changed key (MITM), instead of blindly trusting every connection.
+# Pre-provision the router key in known_hosts for the strongest posture.
 ssh -i "$SSH_KEY" \
-    -o StrictHostKeyChecking=no \
+    -o StrictHostKeyChecking=accept-new \
     -o ConnectTimeout=10 \
     "${OPENWRT_USER}@${OPENWRT_HOST}" \
     "if uci show firewall | grep -q \"name='${RULE_NAME}'\"; then \

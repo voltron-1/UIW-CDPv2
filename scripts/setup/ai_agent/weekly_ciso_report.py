@@ -28,15 +28,31 @@ from elasticsearch import Elasticsearch
 # 0. CONFIGURATION — mirrors agent_app.py env-var conventions
 # ---------------------------------------------------------------------------
 ES_HOST         = os.getenv("ES_HOST",          "https://localhost:9200")
-ES_API_KEY      = os.getenv("ES_API_KEY",        "your_es_api_key")
-LLM_API_KEY     = os.getenv("LLM_API_KEY",       "your_api_key_here")   # shared with agent_app
-LLM_API_URL     = os.getenv("LLM_API_URL",       "https://api.openai.com/v1/chat/completions")
-LLM_MODEL       = os.getenv("LLM_MODEL",         "gpt-4")
+ES_API_KEY      = os.getenv("ES_API_KEY")        # no insecure placeholder default; None => demo fallback
+# Verify ES TLS against the internal CA instead of disabling validation (issue #106).
+ES_CA           = os.getenv("ES_CA",            "/certs/ca/ca.crt")
+ES_VERIFY       = ES_CA if os.path.exists(ES_CA) else False
+LLM_API_KEY     = os.getenv("LLM_API_KEY")       # shared with agent_app; None => summary skipped
+# Default to a LOCAL Ollama model so telemetry stays on campus (CDP §4) — mirrors
+# agent_app.py / .env.example (was hardcoded to api.openai.com). Issue #106.
+LLM_API_URL     = os.getenv("LLM_API_URL",       "http://host.docker.internal:11434/v1/chat/completions")
+LLM_MODEL       = os.getenv("LLM_MODEL",         "llama3.1")
+# Gate hosted-LLM egress, same policy as agent_app.py (issue #106).
+LLM_ALLOW_HOSTED = os.getenv("LLM_ALLOW_HOSTED", "false").lower() == "true"
 NTFY_TOPIC      = os.getenv("NTFY_TOPIC",        "")  # shared with agent_app; set via .env (no hardcoded topic)
 SLACK_TOKEN     = os.getenv("SLACK_BOT_TOKEN",   "")
 SLACK_CHANNEL   = os.getenv("SLACK_CHANNEL_ID",  "")
 PDF_OUTPUT_DIR  = os.getenv("PDF_OUTPUT_DIR",    "/tmp")
 PDF_FILENAME    = os.path.join(PDF_OUTPUT_DIR, "Weekly_NIST_Security_Report.pdf")
+
+# Hosts treated as "hosted" (off-campus) LLM endpoints — egress to these is
+# refused unless LLM_ALLOW_HOSTED=true (issue #106).
+_HOSTED_LLM_HINTS = ("openai.com", "anthropic.com", "googleapis.com",
+                     "azure.com", "cohere.ai", "mistral.ai")
+
+
+def _is_hosted_endpoint(url: str) -> bool:
+    return any(h in (url or "") for h in _HOSTED_LLM_HINTS)
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -45,21 +61,26 @@ log = logging.getLogger(__name__)
 # 1. FETCH DATA & CALCULATE METRICS  (Tasks 4.1 & 4.2)
 # ---------------------------------------------------------------------------
 
-# Task 4.1 — NIST CSF function mapping
-NIST_FUNCTIONS = {"Identify", "Protect", "Detect", "Respond", "Recover"}
+# Task 4.1 — NIST CSF 2.0 function mapping. Govern (GV) is the 6th function added
+# in CSF 2.0 and MUST be present (issue #104; previously the legacy 5 only).
+NIST_FUNCTIONS = {"Govern", "Identify", "Protect", "Detect", "Respond", "Recover"}
+
+# CSF 2.0 two-letter function codes -> full names (accept 'NIST:GV' as well as 'NIST:Govern').
+_NIST_ABBR = {"GV": "Govern", "ID": "Identify", "PR": "Protect",
+              "DE": "Detect", "RS": "Respond", "RC": "Recover"}
 
 
 def _tag_to_nist(tags: list) -> list[str]:
     """
-    Extracts NIST CSF function labels from Kibana alert tags.
-    Expected tag format: 'NIST:Detect', 'NIST:Respond', etc.
-    Returns a list of matched function names.
+    Extracts NIST CSF 2.0 function labels from Kibana alert tags.
+    Accepts 'NIST:Detect' / 'NIST:DE' style tags. Returns matched function names.
     """
     matched = []
     for tag in tags:
         tag_str = str(tag).strip()
         if tag_str.upper().startswith("NIST:"):
-            func = tag_str.split(":", 1)[1].capitalize()
+            raw = tag_str.split(":", 1)[1].strip()
+            func = _NIST_ABBR.get(raw.upper(), raw.capitalize())
             if func in NIST_FUNCTIONS:
                 matched.append(func)
     return matched
@@ -88,7 +109,12 @@ def fetch_and_calculate_metrics() -> dict:
     }
 
     try:
-        es = Elasticsearch(ES_HOST, api_key=ES_API_KEY, verify_certs=False)
+        # Verify TLS against the internal CA (ES_VERIFY) rather than verify_certs=False.
+        es = Elasticsearch(ES_HOST, api_key=ES_API_KEY,
+                           ca_certs=ES_CA if ES_VERIFY else None,
+                           verify_certs=bool(ES_VERIFY))
+        if not ES_VERIFY:
+            log.warning("ES CA not found at %s — TLS verification is OFF; provision the CA bundle.", ES_CA)
         res = es.search(index=".alerts-security.alerts-*", body=query)
         hits = res["hits"]["hits"]
         log.info("Retrieved %d alerts from ES.", len(hits))
@@ -98,7 +124,7 @@ def fetch_and_calculate_metrics() -> dict:
             "total_alerts": 342,
             "average_mttd_minutes": 18.5,
             "nist_breakdown": {
-                "Identify": 12, "Protect": 85,
+                "Govern": 8, "Identify": 12, "Protect": 85,
                 "Detect": 190, "Respond": 45, "Recover": 10,
             },
             "demo_mode": True,
@@ -154,6 +180,17 @@ def generate_executive_summary(metrics: dict) -> str:
     to produce a 3-paragraph board-ready CISO narrative.
     """
     log.info("Generating executive summary via LLM (%s)...", LLM_MODEL)
+
+    # Governance gate (issue #106): refuse to ship telemetry to a hosted endpoint
+    # unless explicitly allowed — same policy agent_app.py enforces.
+    if _is_hosted_endpoint(LLM_API_URL) and not LLM_ALLOW_HOSTED:
+        log.error("Refusing to send metrics to hosted LLM endpoint %s "
+                  "(LLM_ALLOW_HOSTED is false). Set a local model or opt in.", LLM_API_URL)
+        return ("Executive summary skipped: hosted LLM egress is disabled by policy "
+                "(LLM_ALLOW_HOSTED=false). Configure a local model to enable.")
+    if not LLM_API_KEY and _is_hosted_endpoint(LLM_API_URL):
+        log.error("LLM_API_KEY unset for hosted endpoint — skipping summary.")
+        return "Executive summary skipped: LLM_API_KEY is not configured."
 
     system_prompt = (
         "You are an expert Chief Information Security Officer (CISO). "

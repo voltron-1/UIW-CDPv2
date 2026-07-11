@@ -1,24 +1,54 @@
 #!/usr/bin/env python3
-import os
-import yaml
+"""Validate Sigma rules and emit Elastic detection-rule NDJSON + an ATT&CK matrix.
+
+NOTE on query generation (issue #110): the per-rule `query` below is still a
+PLACEHOLDER (it matches on the first ATT&CK tag, not the rule's detection logic),
+and nothing in the repo loads these NDJSON into Kibana yet. Replacing this with a
+real pySigma Elasticsearch backend + a Detection-Engine API loader is tracked in
+issue #110. This script now fixes the deterministic metadata bugs (risk score,
+enabled flag, sub-technique truncation, index target) so the emitted metadata is
+at least correct.
+"""
 import json
 from pathlib import Path
 
-RULES_DIR = Path("/home/tjlam/projects/UIW-CDPv2/rules/sigma")
-OUTPUT_DIR = Path("/home/tjlam/projects/UIW-CDPv2/rules/elastic_watcher")
+import yaml
 
-REQUIRED_FIELDS = ['title', 'id', 'status', 'logsource', 'detection']
+# Resolve paths relative to this file so the script is portable (issue #127):
+# scripts/setup/translate_rules.py -> repo root is parents[2].
+REPO_ROOT = Path(__file__).resolve().parents[2]
+RULES_DIR = REPO_ROOT / "rules" / "sigma"
+OUTPUT_DIR = REPO_ROOT / "rules" / "elastic_watcher"
+MATRIX_MD_PATH = REPO_ROOT / "docs" / "attack_matrix.md"
+
+REQUIRED_FIELDS = ["title", "id", "status", "logsource", "detection"]
+
+# Monotonic Sigma-level -> Elastic risk_score / severity map (issue #117).
+# Previously: risk_score = 50 if level=='high' else 21, so the *critical* rule
+# scored lowest. Now critical > high > medium > low.
+LEVEL_RISK = {"informational": 7, "low": 21, "medium": 47, "high": 73, "critical": 99}
+LEVEL_SEVERITY = {
+    "informational": "low",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "critical": "critical",
+}
+# Statuses that should ship disabled (issue #117 — no longer keyed on 'experimental').
+DISABLED_STATUSES = {"deprecated", "unsupported"}
+
 
 def load_rules():
     rules = []
-    for filepath in RULES_DIR.glob("*.yml"):
-        with open(filepath, 'r') as f:
+    for filepath in sorted(RULES_DIR.glob("*.yml")):
+        with open(filepath, "r", encoding="utf-8") as f:
             try:
                 rule = yaml.safe_load(f)
                 rules.append((filepath.name, rule))
             except yaml.YAMLError as e:
                 print(f"[!] Error parsing {filepath.name}: {e}")
     return rules
+
 
 def validate_rule(filename, rule):
     missing = [field for field in REQUIRED_FIELDS if field not in rule]
@@ -28,72 +58,73 @@ def validate_rule(filename, rule):
     print(f"[PASS] {filename} is valid.")
     return True
 
+
 def convert_to_elasticsearch(filename, rule):
-    # This is a basic mock conversion to Elasticsearch NDJSON format for Detection Rules
+    level = (rule.get("level") or "low").lower()
+    status = (rule.get("status") or "experimental").lower()
+    tags = rule.get("tags", [])
     es_rule = {
-        "id": rule.get('id'),
-        "rule_id": rule.get('id'),
-        "name": rule.get('title'),
-        "description": rule.get('description', ''),
-        "enabled": rule.get('status') == 'experimental',
-        "severity": rule.get('level', 'low'),
-        "risk_score": 50 if rule.get('level') == 'high' else 21,
-        "query": f"tags: \"{rule.get('tags', [''])[0]}\"", # Placeholder query logic
+        "id": rule.get("id"),
+        "rule_id": rule.get("id"),
+        "name": rule.get("title"),
+        "description": rule.get("description", ""),
+        # Drive from status, not 'is experimental' (issue #117).
+        "enabled": status not in DISABLED_STATUSES,
+        "severity": LEVEL_SEVERITY.get(level, "low"),
+        "risk_score": LEVEL_RISK.get(level, 21),
+        # PLACEHOLDER — see module docstring + issue #110.
+        "query": f'tags: "{tags[0]}"' if tags else "*",
         "type": "query",
-        "index": ["logstash-*"],
-        "tags": rule.get('tags', [])
+        # Align with the actual pipeline index (issue #116); was logstash-*.
+        "index": ["logstash-security-*"],
+        "tags": tags,
     }
     return es_rule
 
+
 def generate_attack_matrix(rules):
-    tactics = {}
-    for filename, rule in rules:
-        for tag in rule.get('tags', []):
-            if tag.startswith('attack.'):
-                tag_name = tag.split('.')[1]
-                if tag_name not in tactics:
-                    tactics[tag_name] = []
-                tactics[tag_name].append(rule.get('title'))
-    return tactics
+    """Map full ATT&CK technique IDs (incl. sub-techniques) -> rule titles."""
+    techniques = {}
+    for _filename, rule in rules:
+        for tag in rule.get("tags", []):
+            if tag.startswith("attack."):
+                # Preserve the full id incl. sub-technique (issue #117):
+                # attack.t1003.001 -> t1003.001 (was truncated to t1003).
+                key = tag.split(".", 1)[1]
+                techniques.setdefault(key, []).append(rule.get("title"))
+    return techniques
+
 
 def main():
     print("--- Sigma Rule Validation & Translation ---")
     rules = load_rules()
-    
-    valid_rules = []
-    for filename, rule in rules:
-        if validate_rule(filename, rule):
-            valid_rules.append((filename, rule))
 
+    valid_rules = [(fn, r) for fn, r in rules if validate_rule(fn, r)]
     print(f"\nSuccessfully validated {len(valid_rules)}/{len(rules)} rules.")
-    
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    print("\n--- Translating to Elasticsearch NDJSON ---")
+    print("\n--- Translating to Elasticsearch NDJSON (metadata only; queries are placeholders, issue #110) ---")
     for filename, rule in valid_rules:
         es_rule = convert_to_elasticsearch(filename, rule)
-        output_name = filename.replace('.yml', '.ndjson')
-        output_path = OUTPUT_DIR / output_name
-        with open(output_path, 'w') as f:
-            f.write(json.dumps(es_rule) + '\n')
-        print(f"Translated -> {output_name}")
+        output_path = OUTPUT_DIR / filename.replace(".yml", ".ndjson")
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(json.dumps(es_rule) + "\n")
+        print(f"Translated -> {output_path.name}")
 
     print("\n--- Generating ATT&CK Matrix Data ---")
     matrix = generate_attack_matrix(valid_rules)
-    for tactic, rule_titles in matrix.items():
-        print(f"Tactic: {tactic.upper()}")
-        for title in rule_titles:
-            print(f"  - {title}")
-
-    # Output markdown matrix
-    matrix_md_path = Path("/home/tjlam/projects/UIW-CDPv2/docs/attack_matrix.md")
-    matrix_md_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(matrix_md_path, 'w') as f:
+    MATRIX_MD_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(MATRIX_MD_PATH, "w", encoding="utf-8") as f:
         f.write("# MITRE ATT&CK Coverage Matrix\n\n")
-        f.write("| Tactic / Technique | Detection Rules |\n")
-        f.write("|-------------------|-----------------|\n")
-        for tactic, rule_titles in matrix.items():
-            f.write(f"| **{tactic}** | {', '.join(rule_titles)} |\n")
-    print(f"\nATT&CK Matrix written to {matrix_md_path}")
+        f.write("> Auto-generated by `scripts/setup/translate_rules.py`. Coverage is\n")
+        f.write("> rule-presence only; it does NOT account for whether telemetry exists\n")
+        f.write("> to fire the rule (see issues #100, #110).\n\n")
+        f.write("| ATT&CK Technique | Detection Rules |\n")
+        f.write("|------------------|-----------------|\n")
+        for technique, rule_titles in sorted(matrix.items()):
+            f.write(f"| `{technique}` | {', '.join(rule_titles)} |\n")
+    print(f"\nATT&CK Matrix written to {MATRIX_MD_PATH}")
+
 
 if __name__ == "__main__":
     main()

@@ -36,8 +36,17 @@ if ENV.exists():
             os.environ.setdefault(k, v)
 
 ES_URL = os.environ.get("ES_URL", "https://localhost:9200")
+# Prefer a dedicated read-only metrics user; defaulting to the superuser is a
+# least-privilege violation (issue #106) — warn loudly if it happens.
 ES_USER = os.environ.get("ES_USER", "elastic")
 ES_PASS = os.environ.get("ES_PASS") or os.environ.get("ELASTIC_PASSWORD", "")
+# Verify ES TLS against the internal CA instead of verify=False (issue #106).
+ES_CA = os.environ.get("ES_CA", str(REPO / "scripts" / "setup" / "certs" / "ca" / "ca.crt"))
+ES_VERIFY = ES_CA if os.path.exists(ES_CA) else False
+if ES_USER == "elastic":
+    print("[WARN] slo_metrics using superuser 'elastic' — create a read-only role (issue #106).")
+if not ES_VERIFY:
+    print(f"[WARN] ES CA not found at {ES_CA}; TLS verification OFF (issue #106).")
 KIBANA_URL = os.environ.get("KIBANA_URL", "http://localhost:5601")
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
 WINDOW = os.environ.get("SLO_WINDOW", "now-7d")
@@ -59,13 +68,13 @@ LOWER_BETTER = {
 
 def es(method, path, body=None):
     return requests.request(
-        method, f"{ES_URL}{path}", auth=(ES_USER, ES_PASS), verify=False,
+        method, f"{ES_URL}{path}", auth=(ES_USER, ES_PASS), verify=ES_VERIFY,
         headers={"Content-Type": "application/json"},
         data=json.dumps(body) if body is not None else None, timeout=15)
 
 
 def kb(path):
-    return requests.get(f"{KIBANA_URL}{path}", auth=(ES_USER, ES_PASS),
+    return requests.get(f"{KIBANA_URL}{path}", auth=(ES_USER, ES_PASS), verify=ES_VERIFY,
                         headers={"kbn-xsrf": "true"}, timeout=15)
 
 
