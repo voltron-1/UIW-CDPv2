@@ -1,0 +1,69 @@
+name: Security Scan
+
+# Vulnerability management for the AI agent / broker containers and their
+# Python dependencies. Fails on CRITICAL findings so a known-critical CVE
+# can't merge silently. The weekly schedule catches newly-disclosed CVEs
+# in already-merged code (patch-cadence checkpoint, independent of any PR).
+on:
+  pull_request:
+    paths:
+      - "scripts/setup/ai_agent/**"
+      - "scripts/hive-mind-broker/**"
+      - "scripts/setup/docker-compose*.yml"
+      - "configs/elasticsearch/**"
+      - ".github/workflows/security-scan.yml"
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  dependencies:
+    name: Python dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+      - run: pip install --quiet pip-audit
+      - name: Audit AI-agent dependencies
+        run: pip-audit -r scripts/setup/ai_agent/requirements.txt
+      - name: Audit hive-mind-broker dependencies
+        run: pip-audit -r scripts/hive-mind-broker/requirements.txt
+
+  images:
+    name: Container image scan (Trivy)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ai-agent
+            context: scripts/setup/ai_agent
+          # hive-mind-broker has no Dockerfile yet (not containerized) so it
+          # isn't in this matrix. Add it back here once it is.
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Build ${{ matrix.name }} image
+        run: docker build -t uiw-cdpv2/${{ matrix.name }}:scan ${{ matrix.context }}
+      - name: Trivy — fail on CRITICAL (fixed) vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: uiw-cdpv2/${{ matrix.name }}:scan
+          severity: CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+
+  iac:
+    name: IaC / compose misconfig scan (Trivy config)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Trivy config — scan the docker-compose + ES config
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: scripts/setup
+          severity: CRITICAL,HIGH
+          exit-code: "1"

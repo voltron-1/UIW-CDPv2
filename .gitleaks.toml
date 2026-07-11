@@ -1,0 +1,25 @@
+# gitleaks configuration for this repo. Extends the default ruleset as-is —
+# no custom detection rules. Only adds an allowlist for confirmed false
+# positives, found by running `gitleaks git .` against full repo history
+# before this gate was turned on in CI.
+title = "UIW-CDPv2 gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Confirmed false positives from the default curl-auth-user rule"
+regexes = [
+  # `elastic:$$ELASTIC_PASSWORD` in scripts/setup/docker-compose.yml's
+  # healthcheck (and its appearance in older commits): this is an env-var
+  # reference, not an inline literal. Compose escapes `$` as `$$`, which
+  # collapses back to `$ELASTIC_PASSWORD` at runtime and is read from the
+  # container environment — never a hard-coded credential. Matches
+  # `elastic:$VAR`, `elastic:${VAR}`, and the compose-escaped `elastic:$$VAR`.
+  '''elastic:\$+\{?[A-Za-z_][A-Za-z0-9_]*\}?''',
+  # `curl -u USER:PASS` in docs/SOP-022-anomaly-validation.md is a literal
+  # documentation placeholder telling the reader to substitute their own
+  # credentials, not a real secret. The matched secret value is `USER:PASS`
+  # itself, so the allowlist regex targets that literal string.
+  '''USER:PASS''',
+]
