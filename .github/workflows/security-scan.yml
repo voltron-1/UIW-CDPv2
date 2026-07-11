@@ -27,7 +27,15 @@ jobs:
           python-version: "3.11"
       - run: pip install --quiet pip-audit
       - name: Audit AI-agent dependencies
-        run: pip-audit -r scripts/setup/ai_agent/requirements.txt
+        # CVE-2026-49452 (weasyprint==68.0, CSS injection / SSRF potential via
+        # url()): no patched release exists yet. Suppressed as a tracked
+        # exception rather than left silently unaudited — see
+        # docs/audits/remediation-plan-2026-07-11.md
+        # (NEW-weasyprint-cve-2026-49452) for the reachability analysis (the
+        # LLM-generated report narrative reaches WeasyPrint's HTML renderer
+        # through an unescaped Jinja2 template) and remove this suppression
+        # once a fix ships upstream.
+        run: pip-audit -r scripts/setup/ai_agent/requirements.txt --ignore-vuln CVE-2026-49452
       - name: Audit hive-mind-broker dependencies
         run: pip-audit -r scripts/hive-mind-broker/requirements.txt
 
