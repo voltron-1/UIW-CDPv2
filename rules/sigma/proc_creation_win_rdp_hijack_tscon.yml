@@ -16,4 +16,6 @@ level: high
 tags:
     - attack.privilege_escalation
     - attack.lateral_movement
-    - attack.t1574
+    # T1563.002 = Remote Service Session Hijacking: RDP Hijacking (was T1574,
+    # Hijack Execution Flow, which is unrelated) — issue #118.
+    - attack.t1563.002
