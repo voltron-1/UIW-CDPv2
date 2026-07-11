@@ -46,6 +46,8 @@ All main administrative scripts are currently located in the `setup/` subdirecto
 
 * **`clear_logs.sh`**: 
   Quickly purges and cleans existing Zeek logs in the `/storage/PCAP/zeek_logs/` directory to prevent disk bloat or to reset the environment.
+* **`generate_audit.py`**:
+  Run from the repo root (`python3 scripts/generate_audit.py`) to dump the directory tree plus the contents of key build/config manifests (`docker-compose.yml`, `package.json`, `requirements.txt`, `README.md`) into `repo_audit_packet.md` — a single-file snapshot handy for pasting into an LLM for a repo-wide review. The output is gitignored (point-in-time, regenerate on demand — never commit it).
 
 ### Agile / Project Board (`agile/`)
 

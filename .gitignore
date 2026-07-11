@@ -70,6 +70,10 @@ pdf_content.txt
 node_modules/
 .antigravitycli/
 
+# Generated output of scripts/generate_audit.py — a point-in-time repo dump,
+# regenerate on demand, never commit.
+/repo_audit_packet.md
+
 # ==== Secrets / TLS material / SOAR runtime state (CDP §6, §12.3) ====
 .env
 scripts/setup/.env
