@@ -83,18 +83,36 @@
       "source": "// Prefer the top document hit (IOC or port-scan path); fall back to the top SSH brute-force IP if hits are zero. def ip = 'unknown'; def mac = ''; def dataset = 'unknown'; if (ctx.payload.hits.total.value > 0) { def src = ctx.payload.hits.hits[0]._source; if (src.containsKey('source')) { if (src.source.containsKey('ip'))  { ip  = src.source.ip; } if (src.source.containsKey('mac')) { mac = src.source.mac; } } if (src.containsKey('event') && src.event.containsKey('dataset')) { dataset = src.event.dataset; } } else { def buckets = ctx.payload.aggregations.ssh_brute_force_candidates.by_source_ip.buckets; if (buckets.size() > 0) { ip = buckets[0].key; dataset = 'zeek.ssh (brute-force)'; } } ctx.payload.soar_ip = ip; ctx.payload.soar_mac = mac; ctx.payload.soar_dataset = dataset; return ctx.payload;"
     }
   },
+  "_comment_action": [
+    "webhook_to_soar_agent (retired WS-B): posted here unsigned. agent_app.py's",
+    "/alert route requires an HMAC-SHA256 signature (HMAC_HEADER/HMAC_TS_HEADER,",
+    "see agent_app.py:717-726) and Watcher's webhook action has no built-in way",
+    "to compute one, so every delivery on this path was rejected outright once",
+    "the agent's fail-closed signature gate went in.",
+    "The IOC-match path is now PARTIALLY covered by the signed Logstash SOAR",
+    "trigger instead (scripts/setup/configs/logstash/logstash.conf, Category",
+    "5 — an HTTP output that HMAC-signs the request body with",
+    "SOC_AGENT_HMAC_SECRET before POSTing to /alert), but NOT equivalently:",
+    "Logstash's CRITICAL_THREAT tag is driven by threat_intel.yml, which is",
+    "IP-indexed only, while this watcher's IOC path also matches on",
+    "threat.indicator.domain (Zeek's own domain-intel framework). A",
+    "domain-only indicator hit with no corresponding bad IP in",
+    "threat_intel.yml sets neither path off. Closing that gap means adding",
+    "domain-keyed lookups to the Logstash translate stage — not done here.",
+    "The Scan::Port_Scan and SSH-brute-force paths this watcher also covers",
+    "watcher also covers are windowed aggregations over a rolling window;",
+    "Logstash's per-event filter/output model has no equivalent, so those two",
+    "paths remain detection-only here — visible in Kibana's Watcher history,",
+    "not auto-dispatched to the agent. Do not restore the webhook action",
+    "without adding real HMAC signing (e.g. a Watcher script/transform that",
+    "computes sha256=HMAC(secret, ts + '.' + body) matching agent_app.py's",
+    "_signed_payload() scheme)."
+  ],
   "actions": {
-    "webhook_to_soar_agent": {
-      "webhook": {
-        "scheme": "http",
-        "host": "soc_ai_agent",
-        "port": 5000,
-        "method": "post",
-        "path": "/alert",
-        "headers": {
-          "Content-Type": "application/json"
-        },
-        "body": "{\"severity\": \"critical\", \"source_ip\": \"{{ctx.payload.soar_ip}}\", \"source_mac\": \"{{ctx.payload.soar_mac}}\", \"detection_source\": \"{{ctx.payload.soar_dataset}}\", \"raw_log\": {{ctx.payload.hits.hits.0._source}}}"
+    "log_critical_threat": {
+      "logging": {
+        "level": "error",
+        "text": "CRITICAL_THREAT candidate: dataset={{ctx.payload.soar_dataset}} source.ip={{ctx.payload.soar_ip}} source.mac={{ctx.payload.soar_mac}}. IOC-match alerts are dispatched to the SOC agent via the signed Logstash trigger; this watcher is now log-only for Kibana visibility and for the port-scan/SSH-brute-force paths — see _comment_action."
       }
     }
   }

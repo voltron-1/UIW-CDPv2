@@ -83,10 +83,25 @@ services:
     environment:
       - LS_JAVA_OPTS=-Xms512m -Xmx512m
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set in .env}
+      # Least-privilege ES credentials for the pipeline's write output. Default
+      # to the elastic superuser until a dedicated logstash writer account is
+      # provisioned — set LOGSTASH_ES_USER/LOGSTASH_ES_PASS in .env once it
+      # exists to stop using the superuser.
+      - LOGSTASH_ES_USER=${LOGSTASH_ES_USER:-elastic}
+      - LOGSTASH_ES_PASS=${LOGSTASH_ES_PASS:-${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set in .env}}
+      # Signs the pipeline's outbound SOAR trigger to the agent's /alert
+      # endpoint — MUST equal the ai-agent's SOC_AGENT_HMAC_SECRET.
+      - SOC_AGENT_HMAC_SECRET=${SOC_AGENT_HMAC_SECRET:?SOC_AGENT_HMAC_SECRET must be set in .env}
       # ntfy topic for CRITICAL_THREAT push alerts — never commit a real topic.
       - NTFY_TOPIC=${NTFY_TOPIC:?NTFY_TOPIC must be set in .env}
     volumes:
       - ./configs/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+      # Persisted queue + dead-letter queue settings — see the file for why.
+      - ./configs/logstash/logstash.yml:/usr/share/logstash/config/logstash.yml
+      # Named volume (not the container's ephemeral filesystem) so the
+      # persisted queue + DLQ survive `docker compose down`/`up`, not just an
+      # in-place process crash.
+      - logstash_data:/usr/share/logstash/data
       # Managed malicious-IP indicator list (hot-reloaded; no IOCs hardcoded in the pipeline).
       - ./configs/logstash/threat_intel.yml:/usr/share/logstash/config/threat_intel.yml:ro
       - ./certs:/usr/share/logstash/config/certs:ro
@@ -129,3 +144,4 @@ networks:
 
 volumes:
   suburban_soc_data:
+  logstash_data:

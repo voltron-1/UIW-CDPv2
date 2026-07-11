@@ -10,3 +10,14 @@ filebeat.inputs:
 output.logstash:
   # Remove the hashtag to enable this, and put in your Logstash IP address
   hosts: ["localhost:5044"]
+  # Encrypt telemetry in transit. Logstash's Beats input serves a CA-signed
+  # cert; verify it against the stack CA.
+  ssl.enabled: true
+  ssl.certificate_authorities: ["${FILEBEAT_CA:/etc/filebeat/certs/ca.crt}"]
+  ssl.verification_mode: "${FILEBEAT_SSL_VERIFY:full}"
+  # mTLS: Logstash's Beats input requires client authentication
+  # (ssl_certificate_authorities is set on the server side). Present a
+  # CA-signed client cert as this shipper's identity, or the server rejects
+  # the batch with "tls: certificate required".
+  ssl.certificate: "${FILEBEAT_CERT:/etc/filebeat/certs/filebeat.crt}"
+  ssl.key: "${FILEBEAT_KEY:/etc/filebeat/certs/filebeat.key}"
