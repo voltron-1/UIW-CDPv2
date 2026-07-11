@@ -1,5 +1,3 @@
-version: '3.8'
-
 # =============================================================================
 # Transport security is ON (CDP §6). Before the first `docker compose up`:
 #   1. ./generate_certs.sh           # mints internal CA + node certs into ./certs
@@ -38,6 +36,13 @@ services:
       - ./certs:/usr/share/elasticsearch/config/certs:ro
     ulimits:
       memlock: { soft: -1, hard: -1 }
+    # Cap container RAM so a noisy/leaking service can't starve the host.
+    # Elastic's own sizing guidance: heap should be <=50% of container memory,
+    # leaving room for Lucene off-heap structures (mmap, direct buffers) and
+    # JVM metaspace. A 2g heap (ES_JAVA_OPTS above) needs a 4g+ cap, not 3g —
+    # at 3g the heap is 67% of the limit, which risks the cgroup OOM-killer
+    # killing ES itself under load (the opposite of this cap's purpose).
+    mem_limit: 4g
     # Gate dependents on real readiness, not just container start (issue #113).
     healthcheck:
       test: ["CMD-SHELL", "curl -sk -u elastic:$$ELASTIC_PASSWORD https://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
@@ -72,6 +77,8 @@ services:
       elasticsearch:
         condition: service_healthy
     restart: unless-stopped
+    # Cap container RAM so a noisy/leaking service can't starve the host.
+    mem_limit: 2g
     networks:
       - soc-mesh-net
 
@@ -106,6 +113,10 @@ services:
       - ./configs/logstash/threat_intel.yml:/usr/share/logstash/config/threat_intel.yml:ro
       - ./certs:/usr/share/logstash/config/certs:ro
     restart: unless-stopped
+    # Cap container RAM so a noisy/leaking service can't starve the host.
+    # 512m heap (LS_JAVA_OPTS above) + JVM/off-heap overhead — proportionate
+    # to this repo's still-512m heap, not legacy's raised 1g-heap/2g-limit.
+    mem_limit: 1500m
     networks:
       - soc-mesh-net
     depends_on:
@@ -116,7 +127,12 @@ services:
       context: ./ai_agent
     container_name: soc_ai_agent
     ports:
-      - "5000:5000"
+      # Loopback-only (port-binding-agent-broker): this webhook listener has
+      # no reason to be reachable off-host — Kibana/Watcher/Logstash all
+      # reach it over the internal soc-mesh-net bridge, not the published
+      # port. Publishing to 0.0.0.0 needlessly exposed the fail-closed HMAC
+      # auth surface to the LAN.
+      - "127.0.0.1:5000:5000"
     environment:
       # CDP §4 / §12.3 / §12.4 — safe defaults; override in .env as needed.
       - LLM_API_URL=${LLM_API_URL:-http://host.docker.internal:11434/v1/chat/completions}
@@ -138,6 +154,8 @@ services:
     networks:
       - soc-mesh-net # Make sure this matches the network name your ELK stack uses
     restart: unless-stopped
+    # Cap container RAM so a noisy/leaking service can't starve the host.
+    mem_limit: 512m
 networks:
   soc-mesh-net:
     driver: bridge

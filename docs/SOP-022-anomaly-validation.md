@@ -86,10 +86,15 @@ Expected: every line green; exit 0. Resolve any red items before proceeding — 
 ```bash
 cd ../../scripts/setup/ai_agent
 export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."   # optional
-flask --app agent_app run --host 0.0.0.0 --port 5000
+flask --app agent_app run --host 127.0.0.1 --port 5000
 ```
 
-Expected: `Running on http://0.0.0.0:5000`. Leave this terminal open.
+Expected: `Running on http://127.0.0.1:5000`. Leave this terminal open.
+
+(Loopback-only, matching the compose service's `127.0.0.1:5000:5000` publish — port-binding-agent-broker.
+This webhook has no reason to be LAN-reachable; only run it on `0.0.0.0` if you specifically need an
+off-host caller to reach this manual instance, and understand that reopens the fail-closed HMAC surface
+to the LAN.)
 
 ### Step 5 — Install / refresh the Kibana Watcher
 

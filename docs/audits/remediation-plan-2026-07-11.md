@@ -175,9 +175,11 @@
 
 ## Workstream G — External Exposure & Container Hardening
 
+**Status: DONE.** Merged to `main` 2026-07-11 (direct commit — small, self-contained config-only change; reviewed by security-auditor + code-reviewer, both cleared it with one condition each, both applied: ES `mem_limit` raised 3g→4g after the reviewer flagged the 2g heap was 67% of the cap, risking the cgroup OOM-killer defeating the cap's own purpose; SOP-022/preflight.sh's manual-run instructions changed from `--host 0.0.0.0` to `127.0.0.1` so the doc-driven path matches the hardened container posture instead of silently bypassing it). Also dropped the obsolete `version: '3.8'` compose key while in the file (was producing a warning on every `up`/`config`, zero functional effect).
+
 **Files:** `scripts/setup/docker-compose.yml`, `scripts/setup/ai_agent/Dockerfile`.
 
-**Contains:** `port-binding-agent-broker` (high), `container-user-privilege` (high — **DONE**, pulled forward to `fix/workstream-c-ci-security-gates` 2026-07-11: Workstream C's new Trivy IaC gate (`security-scan.yml`) caught `DS-0002` on `ai_agent/Dockerfile` immediately, so item 2 below was fixed on the spot rather than left red pending a full Workstream G pass; build-and-run verified locally, non-root `appuser` confirmed via `id`), `NEW-compose-availability-hardening` (low, `mem_limit` only remaining).
+**Contains:** `port-binding-agent-broker` (high — DONE, loopback-only publish; the broker compose service itself stays deferred to UIW #94/#181), `container-user-privilege` (high — **DONE**, pulled forward to `fix/workstream-c-ci-security-gates` 2026-07-11: Workstream C's new Trivy IaC gate (`security-scan.yml`) caught `DS-0002` on `ai_agent/Dockerfile` immediately, so item 2 below was fixed on the spot rather than left red pending a full Workstream G pass; build-and-run verified locally, non-root `appuser` confirmed via `id`), `NEW-compose-availability-hardening` (low — DONE, `mem_limit` on all 4 services).
 
 **Fix approach:**
 1. Change the agent's compose port mapping from `"5000:5000"` to `"127.0.0.1:5000:5000"` (loopback-only), and add a compose service definition for the broker with the same loopback confinement once/if UIW #94/#181 decides to integrate it.
