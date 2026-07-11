@@ -1,0 +1,94 @@
+name: CI
+
+# Lint / test / detection-validation gate (issue #108).
+# Hard gates: Sigma metadata validation + Logstash config-drift (both pass today).
+# Report-only (continue-on-error) until the wider cleanup lands: ruff, shellcheck,
+# pytest — flip these to blocking once the codebase is clean.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  sigma-validation:
+    name: Sigma rule + ATT&CK metadata gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyyaml
+      - name: Validate every Sigma rule has required fields + ATT&CK tag (Invariant #6)
+        run: |
+          python - <<'PY'
+          import sys, glob, yaml
+          REQUIRED = {"title", "id", "status", "logsource", "detection"}
+          failed = False
+          for path in sorted(glob.glob("rules/sigma/*.yml")):
+              with open(path) as f:
+                  rule = yaml.safe_load(f)
+              missing = REQUIRED - set(rule or {})
+              tags = (rule or {}).get("tags", []) or []
+              has_attack = any(str(t).startswith("attack.t") for t in tags)
+              if missing:
+                  print(f"::error file={path}::missing fields: {sorted(missing)}")
+                  failed = True
+              if not has_attack:
+                  print(f"::error file={path}::no ATT&CK technique tag (attack.tXXXX)")
+                  failed = True
+          sys.exit(1 if failed else 0)
+          PY
+
+  config-drift:
+    name: Logstash config mirror is in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare pipeline body (from 'input {' onward) of the two copies
+        run: |
+          a=$(sed -n '/^input {/,$p' configs/logstash.conf)
+          b=$(sed -n '/^input {/,$p' scripts/setup/configs/logstash/logstash.conf)
+          if [ "$a" != "$b" ]; then
+            echo "::error::configs/logstash.conf and scripts/setup/configs/logstash/logstash.conf have diverged (issue #105)."
+            diff <(printf '%s' "$a") <(printf '%s' "$b") || true
+            exit 1
+          fi
+          echo "Logstash config copies are in sync."
+
+  python-quality:
+    name: ruff + pytest (report-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff pytest pyyaml
+      - name: ruff
+        continue-on-error: true
+        run: ruff check . --output-format=github
+      - name: pytest
+        continue-on-error: true
+        run: |
+          pip install -r scripts/hive-mind-broker/requirements.txt || true
+          # flask/requests let tests/unit/test_agent_app.py import the SOAR agent
+          # (heavy weasyprint/elasticsearch deps are stubbed inside the test).
+          pip install flask requests || true
+          pytest -q scripts/hive-mind-broker tests/unit || true
+
+  shell-quality:
+    name: shellcheck (report-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        continue-on-error: true
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -r shellcheck -S warning || true
