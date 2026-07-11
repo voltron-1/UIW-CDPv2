@@ -3,13 +3,17 @@
 # IMPORTANT: In production, do NOT store plain-text secrets here. Use HashiCorp Vault or SOPS.
 # For MVP, we point to strictly scoped Ed25519 SSH keys.
 
+# Every router declares its `tenant`; blocks are dispatched only to the alert's
+# tenant — the broker never broadcasts across tenants.
 routers:
   - id: "primary-node-home"
+    tenant: "home"
     ip_address: "192.168.1.1"
     username: "root"
     ssh_key_path: "~/.ssh/id_ed25519_hivemind"
-    
+
   - id: "secondary-node-neighbor"
+    tenant: "neighbor"
     ip_address: "10.0.0.1"
     username: "root"
     ssh_key_path: "~/.ssh/id_ed25519_hivemind"
