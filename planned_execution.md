@@ -24,7 +24,52 @@ network, independent of the monitor NIC.
 
 ---
 
-## LAST SESSION (2026-07-07)
+## LAST SESSION (2026-07-11 → 12)
+
+**Not SO-migration phase work — a parallel security-remediation pass on the
+"old ELK" docker-compose stack** (the one Gate 2+ requires to "stay live" during
+the parity window). Full detail: `docs/audits/security-posture-diff-2026-07-10.md`
+(audit) and `docs/audits/remediation-plan-2026-07-11.md` (the actual source of
+truth for this work — its own status lines, not this file, track completion).
+None of these PRs close a `[P#.#]` item below; recorded here only because it
+touched the same "old ELK" stack this migration plan treats as a dependency.
+
+- **PR #205** — Workstream A: broker/agent HMAC auth (replay protection,
+  privileged-endpoint gating), SSH host-key verification, fail-closed
+  exclusion-list enforcement.
+- **PR #206** — Workstream B: Logstash pipeline hardening (Beats mTLS, signed
+  SOAR trigger replacing the two dead Watcher webhooks, persisted queue + DLQ,
+  parse-failure quarantine, PII stripping at ingest).
+- **PR #207** — Workstream C: CI security gates (gitleaks, Trivy image/IaC
+  scan, pip-audit, SHA-pinned actions, blocking pytest).
+- **PR #208** — Workstream G: agent loopback-only port binding, container
+  memory caps.
+- **PR #209** — Workstream E: least-privilege Elasticsearch service accounts
+  for Logstash/agent/slo_metrics (previously ran as `elastic` superuser).
+- **PR #210** — Workstreams F (partial) + H: broker dependency pinning,
+  pipeline parse-failure test coverage (surfaced and fixed a real gap: modern
+  OpenSSH's `sshd-session`/`sshd-auth` auth events were falling through the
+  sshd grok filter unparsed and unflagged).
+
+One item DOES connect directly to a phase item: **`[P4.1]` #180** (below) is
+tagged "demonstrated an API-driven account-provisioning pattern against
+Suburban-SOC this session; flag on review if grid access differs" — PR #209
+is exactly that demonstration, done properly (role JSONs, an idempotent
+`apply_roles.sh`/`provision_es_service_accounts.sh` pair, and a
+security-review-driven fix splitting one shared writer account into two
+scoped ones so the untrusted-input-facing component can't forge the other's
+audit trail). #180 itself stays open — it still needs the same pattern
+re-applied against the actual SO grid (`auth.sls`, never `so_elastic`), which
+needs grid access this session didn't have — but PR #209 is directly reusable
+prior art for whoever picks that up.
+
+Still open in that remediation plan, not attempted this session:
+`committed-credential-rotation` (UIW #191, below — owner action, needs a
+coordinated history rewrite) and Workstream D (detection content restoration —
+deliberately not started; likely overlaps `[P3.1]`–`[P3.7]` #173–#179 below,
+needs a scoping conversation before touching).
+
+## Prior session (2026-07-07)
 
 - **PR #201** merged — `[P2.6]` #172 ingest-lag helper + A6 measurement method landed on `main` (`migration/parity/ingest_lag.py`, `test_ingest_lag.py`). The re-measurement itself still awaits #167 traffic.
 - **PR #202** merged — audit-remediation doc-truth pass: reconciled the `hive-mind-broker` docs↔code contradiction (README row/tree + SOP-022 note), corrected the Elasticsearch legacy-version drift → **9.3.2** (ADR-001 + 3 re-point stubs), fixed stale `(#109)`→`(#94)` code refs.
@@ -96,7 +141,7 @@ Burns down at Gate 3 (index row): closes #8 #26 #27 #28 #95 #103 #111 · re-scop
 Gate 4: live attack → measurable SOC outcome · human-in-the-loop · least-priv confirmed · Ollama invariant intact.
 Burns down at Gate 4 (index row): inventory rows close · re-scopes #91 #121.
 
-- [ ] `[P4.1]` #180 Dedicated least-priv ES service accounts (never `so_elastic`) — also unlocks CC read-only grid access (deferred here from Phase 1)
+- [ ] `[P4.1]` #180 Dedicated least-priv ES service accounts (never `so_elastic`) — also unlocks CC read-only grid access (deferred here from Phase 1). Provisioning pattern demonstrated against the old-ELK stack 2026-07-11/12, PR #209 — reuse the role-JSON + idempotent-apply-script shape, not the accounts themselves (those are `so_elastic`-adjacent, not `auth.sls`)
 - [ ] `[P4.2]` #181 Re-point Flask SOAR Response Agent (preserve Human-of-Record)
 - [!] `[P4.3]` #182 Re-point HDI/self-critique orchestrator — **blocked: no implementation exists** (0.3 finding); build/descope decision is required pre-work
 - [ ] `[P4.4]` #183 Re-point `slo_metrics.py` + fix #91 (TLS on, least-priv, egress governance)
