@@ -1,0 +1,6 @@
+{
+  "indices": [
+    {"names": ["soar-actions-*"],
+     "privileges": ["create_index","create"]}
+  ]
+}

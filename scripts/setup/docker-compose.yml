@@ -149,11 +149,32 @@ services:
       # If unset, case tracking is skipped and /alert still works.
       - KIBANA_AGENT_USER=${KIBANA_AGENT_USER:-}
       - KIBANA_AGENT_PASS=${KIBANA_AGENT_PASS:-}
+      # NEW-agent-es-transport (Workstream E): the agent's own outbound writes
+      # (soar-actions-<tenant> audit trail, soc-audit-<tenant> tamper-evident
+      # log — agent_app.py:594,707) need real ES creds + a readable CA to
+      # succeed; without them both writes fail (caught, logged, non-fatal —
+      # but the audit trail silently never gets written). Uses its OWN
+      # account (soc_agent_writer), deliberately NOT shared with Logstash's:
+      # Logstash ingests untrusted network data, so giving it write access to
+      # the tamper-evident soc-audit-* trail would let a compromised pipeline
+      # forge audit entries, and giving the agent Logstash's write+manage
+      # reach over logstash-security-* would hand it destructive index-admin
+      # capability it never uses. Same superuser-until-provisioned fallback
+      # as Logstash — run apply_roles.sh + provision_es_service_accounts.sh,
+      # then set AGENT_ES_USER/AGENT_ES_PASS in .env to stop using it here.
+      - ES_HOST=https://elasticsearch:9200
+      - ES_USER=${AGENT_ES_USER:-elastic}
+      - ES_PASS=${AGENT_ES_PASS:-${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set in .env}}
+      - ES_CA=/certs/ca/ca.crt
     volumes:
       - ../../governance:/governance:ro
+      - ./certs:/certs:ro
     networks:
       - soc-mesh-net # Make sure this matches the network name your ELK stack uses
     restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
     # Cap container RAM so a noisy/leaking service can't starve the host.
     mem_limit: 512m
 networks:
