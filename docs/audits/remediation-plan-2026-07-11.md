@@ -175,7 +175,7 @@
 
 ## Workstream G — External Exposure & Container Hardening
 
-**Status: DONE.** Merged to `main` 2026-07-11 (direct commit — small, self-contained config-only change; reviewed by security-auditor + code-reviewer, both cleared it with one condition each, both applied: ES `mem_limit` raised 3g→4g after the reviewer flagged the 2g heap was 67% of the cap, risking the cgroup OOM-killer defeating the cap's own purpose; SOP-022/preflight.sh's manual-run instructions changed from `--host 0.0.0.0` to `127.0.0.1` so the doc-driven path matches the hardened container posture instead of silently bypassing it). Also dropped the obsolete `version: '3.8'` compose key while in the file (was producing a warning on every `up`/`config`, zero functional effect).
+**Status: DONE.** Merged to `main` via PR #208 (2026-07-11). Reviewed by security-auditor + code-reviewer, both cleared it with one condition each, both applied: ES `mem_limit` raised 3g→4g after the reviewer flagged the 2g heap was 67% of the cap, risking the cgroup OOM-killer defeating the cap's own purpose; SOP-022/preflight.sh's manual-run instructions changed from `--host 0.0.0.0` to `127.0.0.1` so the doc-driven path matches the hardened container posture instead of silently bypassing it. Also dropped the obsolete `version: '3.8'` compose key while in the file (was producing a warning on every `up`/`config`, zero functional effect).
 
 **Files:** `scripts/setup/docker-compose.yml`, `scripts/setup/ai_agent/Dockerfile`.
 
