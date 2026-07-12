@@ -88,7 +88,7 @@ section "AI Agent (${AGENT_URL})"
 if curl -fsS --max-time 5 "${AGENT_URL}/weekly-report/status" >/dev/null 2>&1; then
   green "AI agent responding on ${AGENT_URL}"
 else
-  red "AI agent not responding — start with: (cd scripts/setup/ai_agent && flask --app agent_app run --host 0.0.0.0 --port 5000)"
+  red "AI agent not responding — start with: (cd scripts/setup/ai_agent && flask --app agent_app run --host 127.0.0.1 --port 5000)"
 fi
 
 # --- Kibana Watcher ---
