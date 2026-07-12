@@ -86,7 +86,7 @@ jobs:
           # flask/requests let tests/unit/test_agent_app.py import the SOAR agent
           # (heavy weasyprint/elasticsearch deps are stubbed inside the test).
           pip install flask requests || true
-          pytest -q scripts/hive-mind-broker tests/unit
+          pytest -q scripts/hive-mind-broker tests/unit tests/pipeline
 
   shell-quality:
     name: shellcheck (report-only)
