@@ -19,4 +19,6 @@ falsepositives:
 level: medium
 tags:
     - attack.persistence
-    - attack.t1136.001
+    - attack.t1136.001    - nist.800-53.si_4
+    - cis.8
+    - nist.csf.de.ae

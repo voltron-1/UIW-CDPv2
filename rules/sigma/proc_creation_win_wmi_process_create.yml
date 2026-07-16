@@ -18,4 +18,6 @@ falsepositives:
 level: medium
 tags:
     - attack.execution
-    - attack.t1047
+    - attack.t1047    - nist.800-53.si_4
+    - cis.8
+    - nist.csf.de.ae
