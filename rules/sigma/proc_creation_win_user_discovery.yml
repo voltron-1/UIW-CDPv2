@@ -15,4 +15,6 @@ falsepositives:
 level: medium
 tags:
     - attack.discovery
-    - attack.t1033
+    - attack.t1033    - nist.800-53.si_4
+    - cis.8
+    - nist.csf.de.ae

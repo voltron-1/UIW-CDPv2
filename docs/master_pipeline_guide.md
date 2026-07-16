@@ -1,8 +1,13 @@
 # Suburban-SOC Master Pipeline Guide
 
 > **Version 2.0** | Ubuntu 24.04 LTS (noble) | ELK 9.3.2 | Zeek 6.x | May 2026  
-> **Repo:** [voltron-1/Suburban-SOC](https://github.com/voltron-1/Suburban-SOC)  
-> **Upstream:** [sterlinggarnett/cis3353_s26_TL_SG_MF](https://github.com/sterlinggarnett/cis3353_s26_TL_SG_MF)
+> **Repo:** [voltron-1/UIW-Cyber-Defence-Platform](https://github.com/voltron-1/UIW-Cyber-Defence-Platform)  
+> **Upstream:** [sterlinggarnett/Suburban_SOC](https://github.com/sterlinggarnett/Suburban_SOC)
+>
+> **⚠️ Security posture note (issue #107):** the stack runs security **ON** (HTTPS +
+> auth + mTLS). Use `https://localhost:9200` with `-u elastic:$ELASTIC_PASSWORD`
+> (`-k`/CA) for any ES call; ignore troubleshooting steps that assume
+> `xpack.security.enabled=false` or unauthenticated `http://`.
 
 This document contains every bash command needed to deploy and test the Suburban SOC pipeline — from a fresh machine through to verified live data in Kibana.
 

@@ -1,23 +1,24 @@
 # ============================== Filebeat inputs ===============================
-# Suburban-SOC Zeek Integration — authoritative config (matches SOP-002)
+# Suburban-SOC Zeek integration — ships RAW Zeek JSON log lines to Logstash.
 # Stack: ELK 9.3.2 | Input: Zeek JSON logs via filestream
-
+#
+# IMPORTANT (issue #99): do NOT parse JSON here. Logstash parses [message] in
+# its `network_logs` branch; an ndjson parser would consume [message] and leave
+# Logstash's json{source=>message} a no-op. The `tags: [network_logs]` is what
+# routes Zeek data into the network-telemetry branch instead of the endpoint
+# branch (the previous beats-input hard-coded `endpoint_logs` tag mis-routed it).
 filebeat.inputs:
   - type: filestream
     id: zeek-logs
     enabled: true
     paths:
       - /storage/PCAP/zeek_logs/*.log
-    parsers:
-      - ndjson:
-          target: ""
-          overwrite_keys: true
-          add_error_key: true
+    tags: ["network_logs"]
 
 # ============================== Logstash Output ===============================
 output.logstash:
-  # LOGSTASH_HOST env var allows team members to change target without editing this file.
-  # Default: localhost:5044 (works for Docker stack on same host)
+  # LOGSTASH_HOST env var lets team members retarget without editing this file.
+  # Default localhost:5044 works for the Docker stack on the same host.
   hosts: ["${LOGSTASH_HOST:localhost:5044}"]
   # Encrypt telemetry in transit. Logstash's Beats input serves a CA-signed
   # cert; verify it against the stack CA.

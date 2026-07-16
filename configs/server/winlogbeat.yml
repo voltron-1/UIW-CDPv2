@@ -1,0 +1,34 @@
+# ============================== Winlogbeat =====================================
+# Windows endpoint telemetry (Sysmon) for the SOC pipeline — issue #100.
+#
+# WHY: the proc_creation_win_* Sigma rules key on Windows process-creation events
+# (Sysmon Event ID 1: Image / CommandLine). The platform previously ingested only
+# Zeek NETWORK logs, so those detections could never fire. Winlogbeat ships Sysmon
+# events to Logstash :5044 tagged `endpoint_logs`, which the Logstash endpoint
+# branch maps to ECS process.* fields (process.executable / process.command_line).
+#
+# PREREQUISITE: install Sysmon with a sensible config on each Windows endpoint,
+# e.g. SwiftOnSecurity's sysmon-config:
+#   sysmon64.exe -accepteula -i sysmonconfig.xml
+# See docs/SOP-002-endpoint-telemetry.md for the full procedure.
+#
+# NOTE: static config — not runtime-validated against a live endpoint at edit time.
+
+winlogbeat.event_logs:
+  - name: Microsoft-Windows-Sysmon/Operational
+    # 1=process creation (primary), 3=network conn, 11=file create,
+    # 13=registry set — the event IDs the committed detections reference.
+    event_id: 1, 3, 11, 13
+
+# Route into the Logstash endpoint-telemetry branch (NOT network_logs).
+tags: ["endpoint_logs"]
+
+# ============================== Logstash Output ===============================
+output.logstash:
+  hosts: ["${LOGSTASH_HOST:localhost:5044}"]
+
+# Drop noisy Winlogbeat self-metadata before shipping (optional, keeps events lean).
+processors:
+  - drop_fields:
+      fields: ["agent.ephemeral_id", "ecs.version"]
+      ignore_missing: true

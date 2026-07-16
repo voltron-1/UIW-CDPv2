@@ -1,3 +1,9 @@
+# Explicit Compose project name so this repo's stack never collides with another
+# repo whose compose also lives in scripts/setup/ (Docker otherwise derives the
+# project name "setup" from the folder and would cross-wire the two stacks).
+# (Replaces the obsolete `version` attribute, which Compose v2 ignores.)
+name: uiw-cdp
+
 # =============================================================================
 # Transport security is ON (CDP §6). Before the first `docker compose up`:
 #   1. ./generate_certs.sh           # mints internal CA + node certs into ./certs

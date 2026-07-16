@@ -17,4 +17,6 @@ falsepositives:
 level: high
 tags:
     - attack.credential_access
-    - attack.t1003.001
+    - attack.t1003.001    - nist.800-53.si_4
+    - cis.8
+    - nist.csf.de.ae
