@@ -1,0 +1,21 @@
+---
+- name: Configure VLAN Segmentation for SOC Management
+  hosts: switches
+  gather_facts: false
+  tasks:
+    - name: Provision standard lab and management VLANs
+      cisco.ios.ios_config:
+        lines:
+          - name Student_Lab
+        parents: vlan 10
+
+    - name: Provision SOC Management VLAN
+      cisco.ios.ios_config:
+        lines:
+          - name SOC_Management
+        parents: vlan 50
+
+    - name: Save running configuration
+      cisco.ios.ios_command:
+        commands:
+          - write memory
