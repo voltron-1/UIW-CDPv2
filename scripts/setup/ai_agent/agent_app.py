@@ -261,7 +261,7 @@ def dispatch_block_via_broker(attacker_ip: str, tenant: str, source_mac: str = "
             timeout=15,
         )
     except Exception as exc:  # noqa: BLE001 - never let response handling crash
-        app.logger.exception("broker dispatch failed")
+        app.logger.error("broker dispatch failed: %s", exc)
         return False, "broker unreachable"
 
     detail = resp.text[:300]
