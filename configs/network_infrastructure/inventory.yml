@@ -1,0 +1,26 @@
+all:
+  children:
+    switches:
+      hosts:
+        switch-core-01:
+          ansible_host: 192.168.10.1
+        switch-access-01:
+          ansible_host: 192.168.10.2
+      vars:
+        ansible_network_os: cisco.ios.ios
+        ansible_connection: network_cli
+        ansible_user: "{{ lookup('env', 'ANSIBLE_NET_USERNAME') | default('admin', true) }}"
+        ansible_password: "{{ lookup('env', 'ANSIBLE_NET_PASSWORD') | default('cisco', true) }}"
+        ansible_become: yes
+        ansible_become_method: enable
+    routers:
+      hosts:
+        router-edge-01:
+          ansible_host: 192.168.1.1
+      vars:
+        ansible_network_os: cisco.ios.ios
+        ansible_connection: network_cli
+        ansible_user: "{{ lookup('env', 'ANSIBLE_NET_USERNAME') | default('admin', true) }}"
+        ansible_password: "{{ lookup('env', 'ANSIBLE_NET_PASSWORD') | default('cisco', true) }}"
+        ansible_become: yes
+        ansible_become_method: enable
