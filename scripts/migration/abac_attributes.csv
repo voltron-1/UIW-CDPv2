@@ -1,0 +1,7 @@
+attribute_name,allowed_values,criticality
+Role,Admin|User|Guest,High
+Department,Engineering|HR|Finance|Sales,Medium
+Clearance,TopSecret|Secret|Confidential|Unclassified,Critical
+Location,US|EU|APAC,Medium
+DeviceType,Corporate|BYOD,High
+TimeRestriction,WorkingHours|Anytime,Low

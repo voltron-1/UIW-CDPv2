@@ -15,6 +15,7 @@ falsepositives:
 level: medium
 tags:
     - attack.command_and_control
-    - attack.t1105    - nist.800-53.si_4
+    - attack.t1105
+    - nist.800-53.si_4
     - cis.8
     - nist.csf.de.ae
