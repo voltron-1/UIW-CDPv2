@@ -17,6 +17,10 @@ from flask import Flask, request, jsonify
 from weekly_ciso_report import run_reporting_pipeline
 
 app = Flask(__name__)
+# Without this, app.logger's own INFO-level lines fall under the root logger's
+# default WARNING floor and never reach `docker logs` — only the ES-backed
+# write_audit() trail was actually durable.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
@@ -51,9 +55,13 @@ ES_HOST            = os.environ.get("ES_HOST",            "https://elasticsearch
 ES_USER            = os.environ.get("ES_USER",            "logstash_internal")
 ES_PASS            = os.environ.get("ES_PASS",            "")
 ES_CA              = os.environ.get("ES_CA",              "/certs/ca/ca.crt")
-# requests `verify` arg: path to the CA bundle if present, else fall back to False
-# (self-signed cert on the internal docker network). Never disable for public ES.
-ES_VERIFY          = ES_CA if (ES_CA and Path(ES_CA).is_file()) else False
+# requests `verify` arg. FAIL CLOSED: never silently disable TLS verification. If
+# a CA path is configured we hand it to requests — which raises a clear error if
+# the file is missing — instead of silently downgrading every ES call (incl.
+# least-priv creds + audit writes) to an unverified connection whenever the CA
+# isn't mounted. An explicit empty ES_CA opts into system-trust verification
+# (verify=True); never False.
+ES_VERIFY          = ES_CA if ES_CA else True
 
 # CDP §12.3: autonomous containment is Deferred Scope. The agent DRAFTS a
 # response; a human executes it. Set AUTONOMOUS_ISOLATION=true only to restore
@@ -86,7 +94,7 @@ APPROVAL_QUEUE = os.environ.get(
 )
 _queue_lock = threading.Lock()
 
-# Hive-Mind broker — the router-block dispatcher (#109). The agent runs in a slim
+# Hive-Mind broker — the router-block dispatcher (#94). The agent runs in a slim
 # container with no ssh/sudo, so it can't run isolate.sh against a router itself.
 # Instead it routes containment to the broker over an authenticated (HMAC) webhook;
 # the broker owns the per-tenant router inventory and executes the block.
@@ -95,28 +103,101 @@ BROKER_URL    = os.environ.get("BROKER_URL", "http://hive_mind_broker:8000")
 # HIVE_MIND_SECRET. If unset, _execute_isolation fails closed (never dispatches).
 HIVE_MIND_SECRET = os.environ.get("HIVE_MIND_SECRET", "").encode("utf-8")
 
-# --- Webhook authentication (WS0.2) ------------------------------------------
-# /alert triggers device isolation, so it MUST be authenticated. Callers sign the
-# raw request body with HMAC-SHA256 and send it in the `x-elastic-signature`
-# header as "sha256=<hexdigest>" (same scheme as the hive-mind-broker). The shared
-# secret comes from the SOC_AGENT_HMAC_SECRET env var — if it is unset the endpoint
-# fails CLOSED (503), never open.
-HMAC_HEADER = "x-elastic-signature"
-HMAC_SECRET = os.environ.get("SOC_AGENT_HMAC_SECRET", "").encode("utf-8")
+# --- Webhook authentication (WS0.2 + replay protection) ----------------------
+# /alert triggers device isolation, so it MUST be authenticated AND replay-proof.
+# Callers send two headers:
+#   x-elastic-timestamp: <unix seconds>
+#   x-elastic-signature: sha256=<HMAC-SHA256(secret, "<timestamp>." + raw_body)>
+# The verifier (a) requires the timestamp within +/- HMAC_REPLAY_WINDOW seconds of
+# now and (b) refuses a signature already seen within that window (nonce cache), so
+# a captured signed request cannot be replayed. The shared secret comes from
+# SOC_AGENT_HMAC_SECRET; if unset the endpoint fails CLOSED (503), never open.
+HMAC_HEADER        = "x-elastic-signature"
+HMAC_TS_HEADER     = "x-elastic-timestamp"
+HMAC_SECRET        = os.environ.get("SOC_AGENT_HMAC_SECRET", "").encode("utf-8")
+HMAC_REPLAY_WINDOW = int(os.environ.get("HMAC_REPLAY_WINDOW", "300"))  # seconds
+
+# Replay/nonce cache: signature -> expiry epoch. Bounded by the window (pruned on use).
+_seen_sigs: dict[str, int] = {}
+_seen_sigs_lock = threading.Lock()
 
 # Validation patterns for anything that reaches the broker / response path.
 _MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
 
 
-def verify_signature(raw_body: bytes, signature_header: str | None) -> bool:
-    """Constant-time HMAC-SHA256 verification of the raw request body."""
+def _signed_payload(timestamp: str, raw_body: bytes) -> bytes:
+    """The exact bytes both sides HMAC: '<timestamp>.' + raw_body."""
+    return f"{timestamp}.".encode("utf-8") + raw_body
+
+
+def _nonce_is_fresh(signature: str, now: int) -> bool:
+    """Record a VALID signature; return False if it was already seen (replay)."""
+    with _seen_sigs_lock:
+        for sig, exp in list(_seen_sigs.items()):
+            if exp <= now:
+                del _seen_sigs[sig]
+        if signature in _seen_sigs:
+            return False
+        _seen_sigs[signature] = now + HMAC_REPLAY_WINDOW
+        return True
+
+
+def sign_request(secret: bytes, raw_body: bytes, timestamp: str | None = None):
+    """Build (timestamp, 'sha256=<hmac>') for the replay-protected scheme. Used by
+    the agent's own outbound calls (and mirrored by every other signer)."""
+    ts = timestamp or str(int(time.time()))
+    sig = "sha256=" + hmac.new(secret, _signed_payload(ts, raw_body), hashlib.sha256).hexdigest()
+    return ts, sig
+
+
+def verify_signature(raw_body: bytes, signature_header: str | None,
+                     timestamp_header: str | None = None) -> bool:
+    """Constant-time HMAC verification with timestamp-freshness + replay protection.
+
+    Verifies sha256=HMAC(secret, '<timestamp>.' + raw_body), requires the timestamp
+    within +/- HMAC_REPLAY_WINDOW of now, and refuses a previously-seen signature.
+    """
     if not HMAC_SECRET:
-        app.logger.critical("SOC_AGENT_HMAC_SECRET is not set — refusing all /alert requests.")
+        app.logger.critical("SOC_AGENT_HMAC_SECRET is not set — refusing all signed requests.")
         return False
-    if not signature_header:
+    if not signature_header or not timestamp_header:
         return False
-    expected = "sha256=" + hmac.new(HMAC_SECRET, raw_body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature_header)
+    try:
+        ts = int(timestamp_header)
+    except (TypeError, ValueError):
+        return False
+    now = int(time.time())
+    if abs(now - ts) > HMAC_REPLAY_WINDOW:
+        app.logger.warning("Rejected request: timestamp outside the +/-%ss replay window.", HMAC_REPLAY_WINDOW)
+        return False
+    expected = "sha256=" + hmac.new(HMAC_SECRET, _signed_payload(timestamp_header, raw_body), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature_header):
+        return False
+    # Consult/record the nonce cache only AFTER the signature is proven valid, so an
+    # attacker cannot poison it with forged signatures.
+    if not _nonce_is_fresh(signature_header, now):
+        app.logger.warning("Rejected request: replayed signature (already seen within the window).")
+        return False
+    return True
+
+
+def _require_signature():
+    """Fail-closed HMAC gate for privileged operator endpoints.
+
+    Every endpoint that executes a destructive action (/approve), discloses the
+    response queue (/pending), or spawns work (/weekly-report) MUST authenticate —
+    not just /alert. Without this an unauthenticated caller could list drafted
+    actions and approve (and thereby execute) router isolation, defeating the HMAC
+    gate on /alert entirely. Callers sign the RAW request body with
+    SOC_AGENT_HMAC_SECRET (same scheme as /alert; GET requests sign the empty
+    body). Returns a Flask (response, status) tuple to abort with on failure, or
+    None when the request is authenticated.
+    """
+    if not verify_signature(request.get_data(), request.headers.get(HMAC_HEADER),
+                            request.headers.get(HMAC_TS_HEADER)):
+        app.logger.warning("Rejected %s: missing/invalid/replayed HMAC signature.", request.path)
+        return jsonify({"status": "unauthorized"}), 401
+    return None
 
 
 def is_valid_mac(value: str) -> bool:
@@ -124,6 +205,11 @@ def is_valid_mac(value: str) -> bool:
 
 
 def is_valid_ip(value: str) -> bool:
+    # Reject scoped IPv6 literals (e.g. "::1%eth0") — the scope-id suffix is not
+    # itself constrained by ipaddress.ip_address() and this value can reach a
+    # broker-side, SSH-executed firewall command downstream.
+    if not isinstance(value, str) or "%" in value:
+        return False
     try:
         ipaddress.ip_address(value)
         return True
@@ -147,7 +233,7 @@ def _tenant_env_suffix(tenant: str) -> str:
 
 
 def dispatch_block_via_broker(attacker_ip: str, tenant: str, source_mac: str = ""):
-    """Route an approved containment to the hive-mind-broker (#109).
+    """Route an approved containment to the hive-mind-broker (#94).
 
     The agent's slim container has no ssh/sudo, so it cannot run isolate.sh against
     a router. The broker can: it owns the per-tenant router inventory and applies an
@@ -165,16 +251,17 @@ def dispatch_block_via_broker(attacker_ip: str, tenant: str, source_mac: str = "
         "source_mac":  source_mac,
         "approver":    "soc-ai-agent",
     }).encode("utf-8")
-    sig = "sha256=" + hmac.new(HIVE_MIND_SECRET, body, hashlib.sha256).hexdigest()
+    ts, sig = sign_request(HIVE_MIND_SECRET, body)  # replay-protected
     try:
         resp = requests.post(
             f"{BROKER_URL}/webhook/dispatch",
             data=body,
-            headers={"Content-Type": "application/json", HMAC_HEADER: sig},
+            headers={"Content-Type": "application/json",
+                     HMAC_HEADER: sig, HMAC_TS_HEADER: ts},
             timeout=15,
         )
     except Exception as exc:  # noqa: BLE001 - never let response handling crash
-        app.logger.error("broker dispatch failed: %s", exc)
+        app.logger.exception("broker dispatch failed")
         return False, "broker unreachable"
 
     detail = resp.text[:300]
@@ -214,13 +301,20 @@ def _normalize_mac(value: str) -> str:
     return re.sub(r"[:\-]", "", (value or "").strip().upper())
 
 
+class ExclusionListUnavailable(RuntimeError):
+    """The §12.4 exclusion list could not be read. Callers MUST fail closed —
+    refuse to act — rather than proceed with an unverifiable allowlist."""
+
+
 def _load_exclusions():
     """Returns (set_of_ips, set_of_normalized_macs) from EXCLUSION_LIST.
 
-    Fails CLOSED is not appropriate here (a missing list must not silently
-    permit blocking core infra), so a missing/unreadable list is logged loudly
-    and treated as 'exclude nothing' ONLY for IPs/MACs — callers still default
-    to drafting-for-approval, so no autonomous action occurs regardless.
+    Fails CLOSED on an unreadable/missing list (raises ExclusionListUnavailable).
+    A 'log loudly and exclude nothing' posture is unsafe: with AUTONOMOUS_ISOLATION
+    enabled, this check is the ONLY thing between a spoofed or critical alert and
+    auto-isolation of core infra, and §12.4 forbids even *drafting* an action
+    against a protected asset. A missing list must therefore block all action (see
+    is_excluded), not silently permit it.
     """
     ips, macs = set(), set()
     try:
@@ -234,14 +328,48 @@ def _load_exclusions():
                 else:
                     ips.add(entry)
     except OSError as e:
-        app.logger.error("EXCLUSION LIST UNREADABLE (%s): %s", EXCLUSION_LIST, e)
+        app.logger.critical("EXCLUSION LIST UNREADABLE (%s): %s — failing CLOSED", EXCLUSION_LIST, e)
+        raise ExclusionListUnavailable(str(e)) from e
     return ips, macs
 
 
+def _ip_excluded(ip: str, entries) -> bool:
+    """True if `ip` falls inside any exclusion entry. Each entry may be a single
+    IPv4/IPv6 address or a CIDR network — `192.168.1.0/24` protects the whole
+    subnet, IPv6 is supported. Non-IP/CIDR junk in `entries` is inert here (any
+    string that fails ip_network() parsing is skipped) — _load_exclusions()
+    already dropped non-IP/MAC lines at load time, so this never needs an
+    exact-string fallback."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    for entry in entries:
+        try:
+            if addr in ipaddress.ip_network(entry, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+# Sentinel returned when the allowlist can't be read: every asset is treated as
+# protected so the SOAR refuses to isolate anything until the list is restored.
+EXCLUSION_UNVERIFIABLE = "exclusion-list-unavailable"
+
+
 def is_excluded(ip: str = "", mac: str = ""):
-    """Return the matching exclusion entry if ip/mac is protected, else None."""
-    ips, macs = _load_exclusions()
-    if ip and ip in ips:
+    """Return the matching exclusion entry if ip/mac is protected, else None.
+
+    Fails CLOSED: if the exclusion list cannot be read, return the
+    EXCLUSION_UNVERIFIABLE sentinel (truthy) so every caller treats the target as
+    protected and takes no isolating action (§12.4) until the list is restored.
+    """
+    try:
+        ips, macs = _load_exclusions()
+    except ExclusionListUnavailable:
+        return EXCLUSION_UNVERIFIABLE
+    if ip and _ip_excluded(ip, ips):
         return ip
     if mac and _normalize_mac(mac) in macs:
         return mac
@@ -592,8 +720,9 @@ def handle_kibana_webhook():
     # Step 0: authenticate the request BEFORE doing anything else. The raw body is
     # what was signed, so verify it before parsing.
     raw_body = request.get_data()
-    if not verify_signature(raw_body, request.headers.get(HMAC_HEADER)):
-        app.logger.warning("Rejected /alert: missing or invalid HMAC signature.")
+    if not verify_signature(raw_body, request.headers.get(HMAC_HEADER),
+                            request.headers.get(HMAC_TS_HEADER)):
+        app.logger.warning("Rejected /alert: missing/invalid/replayed HMAC signature.")
         return jsonify({"status": "unauthorized"}), 401
     _t0 = time.time()  # WS2.4: automated-response latency (-> MTTR SLO)
 
@@ -729,7 +858,10 @@ def handle_kibana_webhook():
 # =============================================================================
 @app.route("/pending", methods=["GET"])
 def list_pending():
-    """List drafted actions still awaiting human approval."""
+    """List drafted actions still awaiting human approval. Authenticated (HMAC)."""
+    auth_error = _require_signature()
+    if auth_error:
+        return auth_error
     pending = [a for a in _read_queue() if a.get("status") == "pending"]
     # An action is 'pending' unless a later line resolved it; collapse by id.
     resolved = {a["id"] for a in _read_queue() if a.get("status") in ("approved", "denied")}
@@ -739,14 +871,28 @@ def list_pending():
 
 @app.route("/approve", methods=["POST"])
 def approve_action():
-    """Human-of-record approves (and thereby executes) a drafted isolation."""
-    body = request.json or {}
+    """Human-of-record approves (and thereby executes) a drafted isolation.
+
+    Authenticated (HMAC) — this endpoint EXECUTES device isolation, so it must be
+    gated to the same bar as /alert; an open /approve would let any caller execute
+    a drafted block.
+    """
+    auth_error = _require_signature()
+    if auth_error:
+        return auth_error
+    body = request.get_json(silent=True) or {}
     action_id = body.get("id")
     approver = body.get("approver", "unknown")
     if not action_id:
         return jsonify({"error": "missing 'id'"}), 400
 
-    pending = {a["id"]: a for a in _read_queue() if a.get("status") == "pending"}
+    # Subtract already-resolved ids so an action can't be approved (and executed)
+    # twice — the queue is append-only, so the original 'pending' line survives
+    # after approval. Mirrors list_pending and the broker.
+    queue = _read_queue()
+    resolved = {a["id"] for a in queue if a.get("status") in ("approved", "denied")}
+    pending = {a["id"]: a for a in queue
+               if a.get("status") == "pending" and a["id"] not in resolved}
     action = pending.get(action_id)
     if not action:
         return jsonify({"error": f"no pending action {action_id}"}), 404
@@ -791,11 +937,22 @@ def trigger_weekly_report():
     Responds immediately with 202 Accepted; the PDF is generated and
     delivered to Slack + ntfy in the background thread.
 
-    Invoke manually:
-        curl -s -X POST http://localhost:5000/weekly-report
-    Or schedule via cron:
-        0 8 * * 1  curl -s -X POST http://localhost:5000/weekly-report
+    Authenticated (HMAC) — the trigger spawns ES + hosted-LLM + Slack work, so an
+    open endpoint is a cost/DoS amplifier; the caller signs the request body
+    (empty body is fine) with SOC_AGENT_HMAC_SECRET.
+
+    Invoke manually (replay-protected: sign "<timestamp>." + empty body, send both
+    the signature and the timestamp header):
+        TS=$(date +%s)
+        SIG="sha256=$(printf '%s.' "$TS" | openssl dgst -sha256 -hmac "$SOC_AGENT_HMAC_SECRET" | awk '{print $2}')"
+        curl -s -X POST -H "x-elastic-signature: $SIG" -H "x-elastic-timestamp: $TS" \
+             http://localhost:5000/weekly-report
+    Or schedule via cron with the same signed headers (freshly per run).
     """
+    auth_error = _require_signature()
+    if auth_error:
+        return auth_error
+
     def _run():
         try:
             result = run_reporting_pipeline()

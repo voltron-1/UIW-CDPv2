@@ -2,11 +2,11 @@
 # =============================================================================
 # UIW Cyber Defence Platform — Issue Triage
 # Closes 8 duplicate issues and relabels/retitles 16 kept issues
-# Repo: voltron-1/UIW-Cyber-Defence-Platform
+# Repo: voltron-1/UIW-CDPv2
 # =============================================================================
 set -euo pipefail
 
-REPO="voltron-1/UIW-Cyber-Defence-Platform"
+REPO="voltron-1/UIW-CDPv2"
 
 echo ""
 echo "========================================================"

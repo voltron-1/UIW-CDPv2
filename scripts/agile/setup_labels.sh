@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
 # UIW Cyber Defence Platform — GitHub Label Setup
-# Repo: voltron-1/UIW-Cyber-Defence-Platform
+# Repo: voltron-1/UIW-CDPv2
 # =============================================================================
 set -euo pipefail
 
-REPO="voltron-1/UIW-Cyber-Defence-Platform"
+REPO="voltron-1/UIW-CDPv2"
 
 create_or_update_label() {
   local name="$1"

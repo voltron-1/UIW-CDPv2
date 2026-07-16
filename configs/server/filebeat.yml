@@ -1,15 +1,23 @@
-# ============================== Filebeat inputs ===============================
-# Server/host Zeek integration — identical contract to configs/network/filebeat.yml.
-# Ships RAW Zeek JSON lines (no ndjson parser — see issue #99) tagged network_logs.
-# Consolidation of the duplicate Filebeat configs is tracked in issue #124.
 filebeat.inputs:
-  - type: filestream
-    id: zeek-logs
-    enabled: true
-    paths:
-      - /storage/PCAP/zeek_logs/*.log
-    tags: ["network_logs"]
+- type: filestream
+  id: my-zeek-logs
+  enabled: true
+  paths:
+    # Tell Filebeat exactly where the Zeek logs are
+    - /storage/PCAP/zeek_logs/*.log
 
-# ============================== Logstash Output ===============================
+# ------------------------------ Logstash Output -------------------------------
 output.logstash:
-  hosts: ["${LOGSTASH_HOST:localhost:5044}"]
+  # Remove the hashtag to enable this, and put in your Logstash IP address
+  hosts: ["localhost:5044"]
+  # Encrypt telemetry in transit. Logstash's Beats input serves a CA-signed
+  # cert; verify it against the stack CA.
+  ssl.enabled: true
+  ssl.certificate_authorities: ["${FILEBEAT_CA:/etc/filebeat/certs/ca.crt}"]
+  ssl.verification_mode: "${FILEBEAT_SSL_VERIFY:full}"
+  # mTLS: Logstash's Beats input requires client authentication
+  # (ssl_certificate_authorities is set on the server side). Present a
+  # CA-signed client cert as this shipper's identity, or the server rejects
+  # the batch with "tls: certificate required".
+  ssl.certificate: "${FILEBEAT_CERT:/etc/filebeat/certs/filebeat.crt}"
+  ssl.key: "${FILEBEAT_KEY:/etc/filebeat/certs/filebeat.key}"

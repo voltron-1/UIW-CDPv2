@@ -42,6 +42,13 @@ services:
       - ./certs:/usr/share/elasticsearch/config/certs:ro
     ulimits:
       memlock: { soft: -1, hard: -1 }
+    # Cap container RAM so a noisy/leaking service can't starve the host.
+    # Elastic's own sizing guidance: heap should be <=50% of container memory,
+    # leaving room for Lucene off-heap structures (mmap, direct buffers) and
+    # JVM metaspace. A 2g heap (ES_JAVA_OPTS above) needs a 4g+ cap, not 3g —
+    # at 3g the heap is 67% of the limit, which risks the cgroup OOM-killer
+    # killing ES itself under load (the opposite of this cap's purpose).
+    mem_limit: 4g
     # Gate dependents on real readiness, not just container start (issue #113).
     healthcheck:
       test: ["CMD-SHELL", "curl -sk -u elastic:$$ELASTIC_PASSWORD https://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
@@ -76,6 +83,8 @@ services:
       elasticsearch:
         condition: service_healthy
     restart: unless-stopped
+    # Cap container RAM so a noisy/leaking service can't starve the host.
+    mem_limit: 2g
     networks:
       - soc-mesh-net
 
@@ -87,14 +96,33 @@ services:
     environment:
       - LS_JAVA_OPTS=-Xms512m -Xmx512m
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set in .env}
+      # Least-privilege ES credentials for the pipeline's write output. Default
+      # to the elastic superuser until a dedicated logstash writer account is
+      # provisioned — set LOGSTASH_ES_USER/LOGSTASH_ES_PASS in .env once it
+      # exists to stop using the superuser.
+      - LOGSTASH_ES_USER=${LOGSTASH_ES_USER:-elastic}
+      - LOGSTASH_ES_PASS=${LOGSTASH_ES_PASS:-${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set in .env}}
+      # Signs the pipeline's outbound SOAR trigger to the agent's /alert
+      # endpoint — MUST equal the ai-agent's SOC_AGENT_HMAC_SECRET.
+      - SOC_AGENT_HMAC_SECRET=${SOC_AGENT_HMAC_SECRET:?SOC_AGENT_HMAC_SECRET must be set in .env}
       # ntfy topic for CRITICAL_THREAT push alerts — never commit a real topic.
       - NTFY_TOPIC=${NTFY_TOPIC:?NTFY_TOPIC must be set in .env}
     volumes:
       - ./configs/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+      # Persisted queue + dead-letter queue settings — see the file for why.
+      - ./configs/logstash/logstash.yml:/usr/share/logstash/config/logstash.yml
+      # Named volume (not the container's ephemeral filesystem) so the
+      # persisted queue + DLQ survive `docker compose down`/`up`, not just an
+      # in-place process crash.
+      - logstash_data:/usr/share/logstash/data
       # Managed malicious-IP indicator list (hot-reloaded; no IOCs hardcoded in the pipeline).
       - ./configs/logstash/threat_intel.yml:/usr/share/logstash/config/threat_intel.yml:ro
       - ./certs:/usr/share/logstash/config/certs:ro
     restart: unless-stopped
+    # Cap container RAM so a noisy/leaking service can't starve the host.
+    # 512m heap (LS_JAVA_OPTS above) + JVM/off-heap overhead — proportionate
+    # to this repo's still-512m heap, not legacy's raised 1g-heap/2g-limit.
+    mem_limit: 1500m
     networks:
       - soc-mesh-net
     depends_on:
@@ -105,7 +133,12 @@ services:
       context: ./ai_agent
     container_name: soc_ai_agent
     ports:
-      - "5000:5000"
+      # Loopback-only (port-binding-agent-broker): this webhook listener has
+      # no reason to be reachable off-host — Kibana/Watcher/Logstash all
+      # reach it over the internal soc-mesh-net bridge, not the published
+      # port. Publishing to 0.0.0.0 needlessly exposed the fail-closed HMAC
+      # auth surface to the LAN.
+      - "127.0.0.1:5000:5000"
     environment:
       # CDP §4 / §12.3 / §12.4 — safe defaults; override in .env as needed.
       - LLM_API_URL=${LLM_API_URL:-http://host.docker.internal:11434/v1/chat/completions}
@@ -122,14 +155,38 @@ services:
       # If unset, case tracking is skipped and /alert still works.
       - KIBANA_AGENT_USER=${KIBANA_AGENT_USER:-}
       - KIBANA_AGENT_PASS=${KIBANA_AGENT_PASS:-}
+      # NEW-agent-es-transport (Workstream E): the agent's own outbound writes
+      # (soar-actions-<tenant> audit trail, soc-audit-<tenant> tamper-evident
+      # log — agent_app.py:594,707) need real ES creds + a readable CA to
+      # succeed; without them both writes fail (caught, logged, non-fatal —
+      # but the audit trail silently never gets written). Uses its OWN
+      # account (soc_agent_writer), deliberately NOT shared with Logstash's:
+      # Logstash ingests untrusted network data, so giving it write access to
+      # the tamper-evident soc-audit-* trail would let a compromised pipeline
+      # forge audit entries, and giving the agent Logstash's write+manage
+      # reach over logstash-security-* would hand it destructive index-admin
+      # capability it never uses. Same superuser-until-provisioned fallback
+      # as Logstash — run apply_roles.sh + provision_es_service_accounts.sh,
+      # then set AGENT_ES_USER/AGENT_ES_PASS in .env to stop using it here.
+      - ES_HOST=https://elasticsearch:9200
+      - ES_USER=${AGENT_ES_USER:-elastic}
+      - ES_PASS=${AGENT_ES_PASS:-${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set in .env}}
+      - ES_CA=/certs/ca/ca.crt
     volumes:
       - ../../governance:/governance:ro
+      - ./certs:/certs:ro
     networks:
       - soc-mesh-net # Make sure this matches the network name your ELK stack uses
     restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    # Cap container RAM so a noisy/leaking service can't starve the host.
+    mem_limit: 512m
 networks:
   soc-mesh-net:
     driver: bridge
 
 volumes:
   suburban_soc_data:
+  logstash_data:

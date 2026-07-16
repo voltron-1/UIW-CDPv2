@@ -12,6 +12,14 @@
 
 This SOP defines the end-to-end procedure for validating that the Suburban-SOC pipeline correctly detects three canonical attack scenarios and that the SOAR layer (Kibana Watcher → AI Agent → `isolate.sh` → OpenWrt `uci`) responds at machine-speed by quarantining the offending device's MAC address.
 
+> **Containment path is being consolidated (#94).** This SOP documents the original
+> single-host model — the agent SSHes to the OpenWrt router and runs `isolate.sh` for
+> a MAC-based `uci` quarantine. In the current code (`scripts/setup/ai_agent/agent_app.py`)
+> the agent runs in a slim container with no ssh/sudo and instead dispatches an
+> HMAC-signed router block to the `hive-mind-broker` (IP-based nftables). The end-state
+> containment mechanism is being reconciled under **#94** and the Phase 4 SOAR re-point
+> (**#181**); update this procedure when that integration lands.
+
 It complements **SOP-001** (pipeline operations); SOP-001 brings the detection plane up, SOP-022 proves it works.
 
 ---
@@ -78,10 +86,15 @@ Expected: every line green; exit 0. Resolve any red items before proceeding — 
 ```bash
 cd ../../scripts/setup/ai_agent
 export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."   # optional
-flask --app agent_app run --host 0.0.0.0 --port 5000
+flask --app agent_app run --host 127.0.0.1 --port 5000
 ```
 
-Expected: `Running on http://0.0.0.0:5000`. Leave this terminal open.
+Expected: `Running on http://127.0.0.1:5000`. Leave this terminal open.
+
+(Loopback-only, matching the compose service's `127.0.0.1:5000:5000` publish — port-binding-agent-broker.
+This webhook has no reason to be LAN-reachable; only run it on `0.0.0.0` if you specifically need an
+off-host caller to reach this manual instance, and understand that reopens the fail-closed HMAC surface
+to the LAN.)
 
 ### Step 5 — Install / refresh the Kibana Watcher
 

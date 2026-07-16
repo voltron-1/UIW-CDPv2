@@ -1,0 +1,10 @@
+{
+  "cluster": ["monitor","manage_index_templates","manage_ilm","manage_slm","read_slm"],
+  "indices": [
+    {"names": ["logstash-security-*","soar-actions-*","soc-*"],
+     "privileges": ["all"]}
+  ],
+  "applications": [
+    {"application": "kibana-.kibana", "privileges": ["all"], "resources": ["*"]}
+  ]
+}

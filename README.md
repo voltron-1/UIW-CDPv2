@@ -3,9 +3,63 @@
 > **University of the Incarnate Word**  
 > School of Mathematics, Science and Engineering  
 > UIW Cyber & Engineering Laboratory  
-> **Version 6 (Capstone Edition)**  
+> **Version 7 — Security Onion 3.1 Migration**
 
-A fully open-source, enterprise-grade Cyber Defence Platform enabling Student Analysts to monitor, detect, investigate, validate, and respond to cyber threats through an integrated Multi-Agent SOAR ecosystem.
+A fully open-source cyber defence platform enabling Student Analysts to monitor,
+detect, investigate, validate, and respond to cyber threats through an
+integrated AI-assisted SOAR ecosystem.
+
+The platform is **mid-migration**: the base detection stack is moving from a
+hand-built ELK pipeline to **Security Onion 3.1** on dedicated hardware, while
+the original capstone contribution — the SOAR agent, LLM triage layer, Sigma
+detection engineering, and framework governance — is re-pointed onto the new
+platform rather than rebuilt. This README describes what is **in place today**
+and what is **planned**; the two are labelled throughout.
+
+> This supersedes the earlier "Version 6 (Capstone Edition)" design, which
+> targeted a hand-built OpenSearch/Wazuh stack that was never deployed. The
+> migration decision and its rationale are recorded in
+> [ADR-001](docs/adr/ADR-001-security-onion-migration.md).
+
+---
+
+## 🚦 Migration Status
+
+**Target platform:** Security Onion 3.1 (pinned tag `3.1.0-20260528`), **Standalone**
+deployment, ISO install (Oracle Linux 9 + Security Onion together) on dedicated
+hardware. Licensed under Elastic License 2.0 (ELv2); Security Onion **Pro**
+features are out of scope by design (see [Deferred Scope](#-deferred-scope)).
+
+Work is tracked on **GitHub Project #13 — "CARDINAL — SO 3.1 Migration"**
+([board](https://github.com/users/voltron-1/projects/13)), across six phase
+milestones (#9–#14) and 38 task issues (#156–#193). The migration follows a
+strict **parallel-run** discipline: the legacy stack stays live until Security
+Onion proves telemetry *and* detection parity, and is decommissioned only in the
+final phase.
+
+| Phase | Objective | Gate exit criteria | Status |
+|---|---|---|---|
+| **0 — Land the scaffold & pre-flight** | ADR, inventories, rollback snapshot | Scaffold on `main` · planning docs complete · verified ELK snapshot · evidence written | ✅ **Complete** — Gate 0 approved 2026-07-03 with the 0.4 exception |
+| **1 — Stand up the SO grid** | Healthy Standalone grid on its own telemetry | `so-status` clean · SOC console up · SO sensors producing events · old ELK untouched | ⏳ **Next** — blocked on hardware allocation ([#160](https://github.com/voltron-1/UIW-CDPv2/issues/160)) |
+| **2 — Telemetry cutover & parity** | SO data ≥ legacy data, in ECS | Telemetry parity · ECS confirmed · heartbeat visible · ingest lag within SLO · old ELK still live | Planned |
+| **3 — Detection migration** | Sigma rules onto SO's Detections module | ATT&CK coverage rebuilt against SO · kept rules firing · four-gate CI green | Planned |
+| **4 — Re-point the custom layer** | SOAR / LLM / SLOs onto SO's ES | Live attack → measurable SOC outcome · human-in-the-loop · least-priv · Ollama invariant intact | Planned |
+| **5 — Validate, burn down, decommission** | End-to-end capstone demo | Attack → SO alert → AI analysis → analyst response on the live grid; legacy retired | Planned |
+
+The **0.4 exception**: the SO install runbook
+([`docs/migration/so-install-runbook.md`](docs/migration/so-install-runbook.md))
+still holds `TODO` values (target host spec, NIC layout, SPAN/mirror source,
+HOME_NET CIDRs, ISO/KEYS/signature URLs) pending school hardware allocation.
+This blocks Phase 1 only; Gate 0 was approved with it flagged.
+
+**Canonical migration docs:**
+[execution-runbook](docs/migration/execution-runbook.md) ·
+[work-breakdown](docs/migration/work-breakdown.md) ·
+[ADR-001](docs/adr/ADR-001-security-onion-migration.md) ·
+[integration-inventory](docs/migration/integration-inventory.md) ·
+[salt-map](docs/migration/salt-map.md) ·
+[so-install-runbook](docs/migration/so-install-runbook.md) ·
+[evidence/](docs/migration/evidence/)
 
 ---
 
@@ -14,89 +68,124 @@ A fully open-source, enterprise-grade Cyber Defence Platform enabling Student An
 | Name | GitHub Username | Role |
 |---|---|---|
 | **Tommy Lammers** | [@voltron-1](https://github.com/voltron-1) | Lead Architect / Security Analyst |
-| **Sterling Garnett** | [@sterlinggarnett](https://github.com/sterlinggarnett) | Security Analyst / Engineer |
-| **Ishmael Pendleton** | [@cryptgrphy](https://github.com/cryptgrphy) | Network Engineer / Documentation |
+| **Sterling Garnett** | @sterlinggarnett | Security Analyst / Engineer |
+| **Ishmael Pendleton** | @cryptgrphy | Network Engineer / Documentation |
+
+> **Note:** In practice this repository is **single-maintainer** (@voltron-1).
+> The teammate handles above are name placeholders for role assignment, not
+> separate active GitHub collaborators; per-task ownership is recorded in each
+> issue body (see [board-structure-proposal](docs/migration/board-structure-proposal.md)).
 
 ---
 
 ## 🎯 Vision & Definition of Success
 
-**The goal is not to build a SIEM.** The goal is to build an enduring cyber defence capability that can be comprehensively extended, analyzed, and operated by subsequent generations of UIW Student Analysts.
+**The goal is not to build a SIEM.** The goal is to build an enduring cyber
+defence capability that can be comprehensively extended, analyzed, and operated
+by subsequent generations of UIW Student Analysts.
 
-The platform achieves its capstone mission when a Student Analyst can successfully complete this **6-Step Operational Workflow**:
+The platform achieves its capstone mission when a Student Analyst can complete
+this **6-Step Operational Workflow**:
 
 1. **Observe** an unannounced attack safely generated by the Adversary-in-a-Box emulation platform.
-2. **Verify** continuous flow of raw network and host security telemetry within OpenSearch.
-3. **Observe** a validated, non-duplicated alert generated cleanly via the Sigma Detection Engine.
-4. **Receive** an enriched, structured incident briefing compiled by the local Multi-Agent SOAR framework.
-5. **Investigate** historical context and malicious artifacts using tailored OpenSearch Dashboards.
+2. **Verify** continuous flow of raw network and host security telemetry within Security Onion's Elasticsearch.
+3. **Observe** a validated, non-duplicated alert generated cleanly via Security Onion's Detections module (Sigma, deployed to the `local-sigma` custom rule repo).
+4. **Receive** an enriched, structured incident briefing compiled by the local SOAR framework.
+5. **Investigate** historical context and malicious artifacts using the SOC console and tailored Kibana dashboards.
 6. **Execute** a prescriptive, informed manual mitigation blueprint.
 
 ---
 
-## 🗺️ Program Increment (PI) Roadmap
+## 🏗️ Architecture: Today vs. Target
 
-The project transitions the legacy single-host MVP architecture into an operational, validated campus platform via 7 Program Increments (PIs). Work is tracked on our [GitHub Project Board](https://github.com/voltron-1/UIW-Cyber-Defence-Platform/projects).
+The migration replaces the **base pipeline**, not the custom layer. Security
+Onion takes over ingest, indexing, and the analyst console; the original
+capstone components survive and re-point onto it.
 
-| PI | Core Technical Objective | Lead | Status |
-|---|---|---|---|
-| **PI-1: Foundation** | Audit legacy architecture, infrastructure baseline hardening | @cryptgrphy | In Progress |
-| **PI-2: Platform** | Migrate to OpenSearch cluster, standardize pipelines | @voltron-1 | Not Started |
-| **PI-3: Detection** | Validate Sigma rules, map to MITRE ATT&CK dashboard | @sterlinggarnett | In Progress |
-| **PI-4: Adversary** | Automate Adversary-in-a-Box validation playbooks | @voltron-1 | In Progress |
-| **PI-5: SOAR Core** | Provision containerized Python MAS & Ollama infrastructure | @voltron-1 | In Progress (Response + Compliance agents) |
-| **PI-6: Operations** | Develop Student Analyst Ops Guides and Training Labs | @cryptgrphy | Not Started |
-| **PI-7: Capstone** | Execute end-to-end operational sequence demo | All Hands | Not Started |
+### Running today (legacy stack)
+
+A hand-built pipeline: **Zeek → Filebeat → Logstash → Elasticsearch → Kibana**.
+The stack's compose definition
+([`scripts/setup/docker-compose.yml`](scripts/setup/docker-compose.yml)) pins
+Elasticsearch, Kibana, and Logstash at **9.3.2**; the live deployment operates
+from the sibling repository
+[`voltron-1/Suburban_SOC`](https://github.com/voltron-1/Suburban_SOC). This
+repository holds the platform's documentation, detection rules, custom layer,
+and the migration work.
+
+> The Version 6 design named an **OpenSearch** cluster with **OpenSearch
+> Dashboards** and **Wazuh** host telemetry. None of those were deployed —
+> the actual stack is Elasticsearch/Kibana, host telemetry is a migration
+> deliverable (Phase 2), and Suricata arrives natively with Security Onion.
+
+### Target (Security Onion 3.1) — component disposition
+
+| Component | Today | Security Onion 3.1 target | Disposition | Phase |
+|---|---|---|---|---|
+| Infrastructure base | Docker on a Linux host | Oracle Linux 9 (baked into the SO ISO), dedicated hardware | Replace | 1 |
+| Central index / SIEM | Elasticsearch 9.3.2 | Elasticsearch 9.3.3 (SO-managed) | Replace | 1 |
+| Analyst console | Kibana | SOC console (Hunt, Dashboards, Cases; Kibana-backed) | Replace | 1 |
+| Network telemetry | Zeek → Filebeat | Zeek **and** Suricata, native SO sensors | Replace | 2 |
+| Host telemetry | *(none deployed)* | Elastic Agent via Fleet + Sysmon | **New** | 2 |
+| Ingest plumbing | Logstash | SO-native ingest / ECS normalization | Retire | 2 |
+| Detection rules | Sigma (via `translate_rules.py`) | SO Detections module (`local-sigma` repo) | Migrate | 3 |
+| Detection CI | *(placeholder)* | Four-gate Sigma CI retargeted at SO's ES | Migrate | 3 |
+| SOAR Response Agent | Flask app on ES/Kibana | Re-pointed via dedicated least-priv account | Keep + re-point | 4 |
+| SLO / reporting scripts | `slo_metrics.py`, `weekly_ciso_report.py` | Re-pointed, TLS + least-priv, egress governance | Keep + re-point | 4 |
+| LLM analysis | Ollama (local) | Ollama, telemetry-stays-on-campus verified | Keep | 4 |
+| Emulation | Adversary-in-a-Box | Drives the Phase 5 kill-chain validation | Keep | 5 |
+| Router-block containment tier | `scripts/hive-mind-broker/` — present in-repo, not yet wired into compose | Deployed on `soc-mesh-net`; executes the approved, HMAC-signed nftables router blocks the agent dispatches | Keep + integrate | 4 |
+| Watcher placeholders | `rules/elastic_watcher/` | *(superseded by SO Detections)* | Retire | 4 |
+
+> **Router-block tier status (#94):** `hive-mind-broker` is present in-repo and the
+> agent already dispatches HMAC-signed blocks to it, but the integration is **not
+> complete** — it has no `docker-compose` service, `BROKER_URL` / `HIVE_MIND_SECRET`
+> are not templated in `.env.example`, the agent's dispatch endpoint does not yet
+> match the broker's, and the two keep separate approval queues. Completion is
+> tracked in **#94** and sequenced into the Phase 4 SOAR re-point (**#181**).
+
+Retirement of the legacy stack is **destructive and last**: it happens only in
+Phase 5, only after a passing gate, and only after a final snapshot.
 
 ---
 
-## 🏗️ Technical Architecture
+## 🧠 The Custom Layer — What Exists vs. Planned
 
-> **⚠️ Current vs Target (read this first).** This repository **currently** implements
-> a hardened **ELK 9.3.2 (Elasticsearch / Kibana / Logstash) + Zeek** stack with a
-> single Flask-based SOAR agent. The **OpenSearch** migration, **Suricata**,
-> **Wazuh**, local **Ollama**, and the full **4-agent MAS** are the **target
-> architecture (roadmap)** — see PI-2 / PI-5 above. The `Status` column below tags
-> each component so the design intent and the shipped reality are not confused.
+The custom AI-assisted SOAR layer is the capstone's original contribution. Its
+current state is honest about what is built:
 
-| Component | Target Technology | Status | Ecosystem Role |
-|---|---|---|---|
-| **Infrastructure Base** | Ubuntu Linux | **Current** | Hardened logical nodes serving as the isolated laboratory baseline environment. |
-| **Central Index & SIEM** | OpenSearch Cluster | **Roadmap (PI-2)** — currently **Elasticsearch 9.3.2** | Single source of truth for telemetry ingestion, field parsing, correlation indexing. |
-| **Visualization Plane** | OpenSearch Dashboards | **Roadmap (PI-2)** — currently **Kibana 9.3.2** | Unified analyst monitoring workspace, metrics reporting, visual threat hunting. |
-| **Network Telemetry** | Suricata NIDS | **Roadmap** — currently **Zeek** (OpenWrt SPAN capture) | Passive network intrusion detection. |
-| **Host Telemetry** | Wazuh HIDS | **Roadmap** — interim: **Sysmon + Winlogbeat** (see `docs/SOP-002-endpoint-telemetry.md`) | Endpoint process/host telemetry into the pipeline. |
-| **AI Execution Engine** | Ollama (local) | **Partial** — SOAR defaults to local Ollama; hosted egress is gated | Localized LLM engine to keep telemetry on campus. |
-| **SOAR Framework** | Custom Python MAS (4 agents) | **Partial** — **Response + Compliance** built; Threat Hunter / CTI / Agent Bus are **roadmap (PI-5)** | Multi-Agent alert enrichment, triage, reporting. |
-| **Emulation Engine** | Adversary-in-a-Box | **Current** — local sim scripts (`tests/anomaly_simulation/`) | Emulates real-world threat behaviors. |
+**Built and in the repo** (`scripts/setup/ai_agent/`):
+- **SOAR Response Agent** (`agent_app.py`) — a Flask service with HMAC-SHA256-signed
+  webhooks; ingests alerts, drafts containment blueprints, and queues them for
+  explicit human approval (Human-of-Record).
+- **SLO metrics** (`slo_metrics.py`) — computes MTTD/MTTR against the index.
+- **Compliance reporting** (`weekly_ciso_report.py`) — weekly executive summary
+  mapped to NIST CSF functions.
+- **Local LLM path** — Ollama, invoked from the Response Agent's analysis path,
+  gated so sensitive telemetry stays on campus.
 
----
-
-## 🧠 The Multi-Agent System (MAS)
-
-The automated orchestration layer is **designed** for four specialized Python agents
-executing via an internal Agent Communication Bus. **Current status:** the **Response
-Agent** (`scripts/setup/ai_agent/agent_app.py`) and the **Compliance Agent**
-(`scripts/setup/ai_agent/weekly_ciso_report.py`) are implemented; the **Threat Hunter
-Agent**, **CTI Agent**, and the **Agent Communication Bus** are **roadmap (PI-5)**.
-
-1. **Response Agent (SOAR Core):** Ingests automated OpenSearch alerts via webhooks, compiles incident briefings, and structures prescriptive containment blueprints for human approval.
-2. **Threat Hunter Agent:** Executes a continuous 15-minute scheduled cadence querying OpenSearch indices for behavioral anomalies and low-and-slow patterns.
-3. **CTI Agent:** Threat Intelligence Enrichment via external OSINT feeds (VirusTotal, AlienVault OTX) to extract reputational confidence metrics.
-4. **Compliance Agent:** Aggregates operational OpenSearch data into formalized weekly executive summaries capturing MTTD, MTTR, and NIST CSF mapping.
+**Planned, not yet built:**
+- **HDI / self-critique orchestrator** — referenced in the planning docs but
+  **no implementation exists in this repo** (flagged in the
+  [integration inventory](docs/migration/integration-inventory.md)); a build/
+  descope decision precedes its Phase 4 re-point.
+- **Threat Hunter** and **CTI enrichment** agents, and a formal **Agent
+  Communication Bus** — part of the original vision, not yet implemented.
 
 ---
 
 ## 🛡️ Architectural Invariants
 
-To guarantee operational integrity and data security, 5 design invariants are enforced. Any variance requires formal change-management review.
+To guarantee operational integrity and data security, the following design
+invariants are enforced. Any variance requires formal change-management review.
 
-1. **Hardening-First Invariant:** No component is provisioned until the host passes baseline hardening validation.
-2. **Telemetry-Stays-on-Campus:** Laboratory telemetry is prohibited from exiting physical university hardware. Localized Ollama processes all sensitive data.
-3. **Human-of-Record Invariant:** Autonomous containment authority is explicitly out of scope. Every mitigation action requires explicit human authorization by a Student Analyst.
-4. **Single-Source-of-Truth:** The centralized OpenSearch cluster serves as the absolute authoritative log index.
-5. **Written-Authorization Required:** No offensive emulation script shall be executed against UIW infrastructure without an active, signed Rules of Engagement (RoE) document.
+1. **Hardening-First:** No component is provisioned until the host passes baseline hardening validation.
+2. **Telemetry-Stays-on-Campus:** Laboratory telemetry is prohibited from exiting physical university hardware. Local Ollama processes all sensitive data.
+3. **Human-of-Record:** Autonomous containment authority is out of scope. Every mitigation action requires explicit human authorization by a Student Analyst.
+4. **Single-Source-of-Truth:** Security Onion's Elasticsearch is the authoritative log index. (During the migration, the legacy index remains authoritative until Gate 2 parity is proven.)
+5. **Written-Authorization Required:** No offensive emulation script runs against UIW infrastructure without an active, signed Rules of Engagement (RoE) document.
 6. **Framework-Traceability-Required:** No detection rule or SOP is merged without NIST CSF 2.0 and MITRE ATT&CK metadata, so every artifact traces upward to the governance layer.
+7. **Least-Privilege Service Accounts:** Every re-pointed component connects to Security Onion's Elasticsearch through a dedicated least-privilege account mirroring SO's `auth.sls` pattern — never a borrowed built-in credential such as `so_elastic`.
 
 ---
 
@@ -122,8 +211,8 @@ one CSF 2.0 Function and, where applicable, an ISO 27001:2022 Annex A control.
 ```
 
 This is delivered as a cross-cutting **Framework Alignment** milestone (four
-workstreams, WS-A…WS-D) that overlays the PI roadmap. The full plan, gap
-analysis, and Definition of Done live in
+workstreams, WS-A…WS-D). The full plan, gap analysis, and Definition of Done
+live in
 [`docs/internal documents/UIW_Strategic_Framework_Alignment_Plan.md`](docs/internal%20documents/UIW_Strategic_Framework_Alignment_Plan.md).
 
 | Workstream | Framework layer | Core deliverables |
@@ -133,60 +222,116 @@ analysis, and Definition of Done live in
 | **WS-C** | MITRE ATT&CK | Navigator layer (generated), telemetry-aware coverage scorecard, detection lifecycle/QA |
 | **WS-D** | Traceability | Master CSF↔ISO↔SOC-CMM↔ATT&CK matrix + CI enforcement |
 
-> **Status (planned).** This Framework Alignment layer is a **roadmap deliverable**,
-> not yet shipped. Today the repo contains `governance/exclusion_list.txt` only; the
-> governance pack, CSF 2.0 profile, ISO 27001 Annex A SoA, SOC-CMM baseline, ATT&CK
-> Navigator layer, and traceability matrix are tracked in issue #103. The CSF 2.0
-> **Govern** function is wired into the CISO report (`weekly_ciso_report.py`).
+> **Status:** the WS-A…WS-D deliverables are **planned content** — per the plan's
+> own gap analysis they are not yet built as repository files. The ATT&CK
+> coverage matrix (WS-C) is rebuilt against Security Onion at Gate 3.
+
+---
+
+## 🗺️ Roadmap Note — Migration Phases vs. Legacy PI Taxonomy
+
+Execution is now driven through the six migration **phase milestones (M1–M6)**
+described above. The original **PI-1…PI-7** program-increment milestones remain
+on the board as an **additive legacy taxonomy** — they are not deleted, but they
+are no longer the active execution track. In particular, PI-2's "Migrate to
+OpenSearch cluster" objective is formally **superseded** by the Security Onion
+decision in [ADR-001](docs/adr/ADR-001-security-onion-migration.md).
+
+---
+
+## ⚙️ CI / Automation
+
+**Running today** (`.github/workflows/`):
+- **`wiki-sync.yml`** — deterministic, non-blocking sync that republishes
+  `docs/` and `scripts/` content to the GitHub wiki on merge to `main`. It never
+  gates a commit, PR, or merge. *(One-time manual wiki initialization is still
+  outstanding; until then the job exits cleanly with a remediation notice.)*
+- **`codeql.yml`** — CodeQL Advanced security scanning (push / PR / weekly).
+- **`automate-infra-board.yml`** — manual (`workflow_dispatch`) board/label/issue
+  automation.
+
+**Planned:**
+- **Four-gate Sigma CI** (lint → true-positive → false-positive → re-emulation)
+  retargeted at Security Onion's Elasticsearch — Phase 3
+  ([#178](https://github.com/voltron-1/UIW-CDPv2/issues/178)).
+- **Traceability CI** enforcing the CSF↔ISO↔SOC-CMM↔ATT&CK matrix — WS-D.
 
 ---
 
 ## 🚫 Deferred Scope
 
-To ensure delivery of the core platform for the Capstone, the following are explicitly out of scope:
+To ensure delivery of the core platform for the Capstone, the following are
+explicitly out of scope:
 - Enterprise ticketing systems integration (e.g., Jira, ServiceNow)
 - Dedicated asset discovery scanning platforms
 - Autonomous zero-click containment execution
 - Campus-wide fleet log ingestion (bounded to Lab subnet only)
 - Paid commercial threat intelligence platforms
+- **Security Onion Pro features** — MCP Server, External API, Reports, OIDC, and
+  Onion AI. The platform must demonstrate that an AI-assisted SOC layer can be
+  built on the free tier (Ollama + Flask SOAR + custom reporting are the
+  free-tier equivalents). The `reference/` clone is ELv2-licensed, gitignored,
+  and never redistributed through this repository.
 
 ---
 
 ## 📁 Repository Structure
 
-\`\`\`text
+```text
 / (root)
-├── README.md                   # You are here
-├── LICENSE                     # MIT License
-├── /configs                    # Core component configurations
-│   ├── logstash.conf           # Logstash pipeline (mirror of the deployed copy)
-│   ├── /network, /server       # filebeat.yml / winlogbeat.yml + Kibana NDJSON exports
-│   ├── /zeek, /intel           # Zeek sensor + threat-intel config
-│   └── /opensearch             # (planned) OpenSearch index templates — PI-2
-├── /governance                 # Governance & compliance layer (WS-A/B/D)
-│   ├── exclusion_list.txt      # SOAR permanent allowlist (single source of truth)
-│   ├── /policies               # (planned) Lab security policies — WS-A
-│   ├── /soc-cmm                # (planned) SOC-CMM maturity assessment — WS-B
-│   ├── nist-csf-2.0-profile.md # (planned) CSF 2.0 Current/Target Profile — WS-A
-│   ├── iso27001-annexA-mapping.md   # (planned) ISO 27001:2022 Annex A mapping — WS-A
-│   └── traceability-matrix.md  # (planned) CSF ↔ ISO ↔ SOC-CMM ↔ ATT&CK — WS-D
-├── /docs                       # Technical documentation
-│   ├── /legacy                 # Legacy Suburban-SOC archive
-│   ├── /internal documents     # Architecture, program & framework-alignment plans
-│   ├── /detections             # SIEM KQL docs ( + (planned) ATT&CK scorecard — WS-C )
-│   ├── /operations             # (planned) Roles/RACI, metrics catalog — WS-B
-│   └── /playbooks              # Incident-response playbooks
-├── /evidence                   # Pipeline proof, validation logs, and Kibana screenshots
-├── /reports                    # Compliance Agent outputs and coverage reports
-├── /rules                      # Sigma detection engineering repository
-│   ├── /sigma                  # Sigma source rules (ATT&CK-tagged)
-│   ├── /elastic_watcher        # Generated Elastic detection-rule NDJSON
-│   └── /attack                 # (planned) ATT&CK Navigator coverage layer — WS-C
-├── /scripts                    # Automation, SOAR agents, and setup scripts
-│   ├── /agile                  # GitHub CLI board management scripts
-│   ├── /hive-mind-broker       # Experimental IP-block SOAR broker (not integrated — issue #109)
-│   └── /setup                  # Infrastructure provisioning
-│       ├── /ai_agent           # SOAR agents (Response=agent_app.py, Compliance=weekly_ciso_report.py)
-│       └── docker-compose.yml  # Centralized SIEM + MAS stack definition
-└── /tests                      # Unit tests for Logstash pipelines and Agent Bus
-\`\`\`
+├── README.md                     # You are here
+├── LICENSE                       # MIT License
+├── configs/                      # Legacy component configurations
+│   ├── firewall/                 # Firewall / containment configs
+│   ├── intel/                    # Zeek intel framework (config.zeek, intel.dat)
+│   ├── network/                  # Sensor-side filebeat.yml
+│   ├── server/                   # Kibana saved-object NDJSON exports + filebeat.yml
+│   ├── zeek/                     # Zeek local.zeek
+│   ├── logstash.conf             # Legacy Logstash pipeline
+│   └── threat_intel.yml          # Threat-intel feed config
+├── detections/                   # Sigma → Security Onion migration notes (ECS triage)
+├── docs/                         # Technical documentation
+│   ├── adr/                      # Architecture Decision Records (ADR-001: SO migration)
+│   ├── migration/                # Runbook, work-breakdown, inventories, salt-map, evidence/
+│   ├── detections/               # KQL / detection documentation
+│   ├── internal documents/       # Proposals, implementation & framework-alignment plans
+│   ├── legacy/                    # Ancestor "Suburban-SOC" course-project archive
+│   ├── playbooks/                # IR / Sigma playbooks
+│   ├── sprint-notes/             # Sprint records
+│   └── *.md, architecture-diagram.png       # SOPs, pipeline guides, diagrams
+├── evidence/                     # Pipeline proof, validation logs, screenshots/
+├── governance/                   # Governance & compliance layer
+│   └── exclusion_list.txt        # SOAR permanent allowlist (single source of truth)
+│                                 # (WS-A/B/D framework deliverables are planned, not yet present)
+├── migration/                    # Security Onion integration staging
+│   ├── ci/                       # Four-gate Sigma CI retarget (placeholder)
+│   └── integrations/             # Re-point stubs: soar-agent, orchestrator, slo-metrics
+├── plans/                        # Working plans (dated)
+├── reports/                      # Compliance / final-report drafts
+├── rules/                        # Detection engineering
+│   ├── sigma/                    # Sigma source rules (10, ATT&CK-tagged)
+│   └── elastic_watcher/          # Legacy Watcher rules (retiring — superseded by SO)
+├── scripts/                      # Automation, SOAR agents, setup
+│   ├── agile/                    # GitHub CLI board management + framework scripts
+│   ├── hive-mind-broker/         # Router-block containment tier (integrating — #94, Phase 4)
+│   ├── setup/                    # Provisioning + docker-compose.yml
+│   │   └── ai_agent/             # SOAR Response Agent, slo_metrics, weekly_ciso_report
+│   └── wiki/                     # build_wiki.py (wiki-sync generator)
+├── tests/                        # Test assets
+│   ├── anomaly_simulation/       # Adversary emulation shell sims
+│   └── unit/                     # (unit tests: planned)
+└── .github/workflows/            # wiki-sync, codeql, automate-infra-board
+```
+
+> **Not shown / not tracked:** `reference/` is a **gitignored** read-only clone of
+> Security Onion (pinned `3.1.0-20260528`, ELv2) — it is absent until cloned
+> locally and is never committed. The repository root also carries a handful of
+> one-off audit artifacts and editor/tool leftovers slated for housekeeping.
+
+---
+
+## 📄 License
+
+Released under the [MIT License](LICENSE). (The vendored `reference/` Security
+Onion clone is separately licensed under Elastic License 2.0 and is not covered
+by this repository's license.)

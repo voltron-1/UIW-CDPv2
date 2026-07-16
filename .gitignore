@@ -6,6 +6,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# ==== Claude Code local state (worktrees, chat images) ====
+.claude/
+
 # ==== Virtual Environments & Caches ====
 .venv/
 venv/
@@ -67,8 +70,17 @@ pdf_content.txt
 node_modules/
 .antigravitycli/
 
+# Generated output of scripts/generate_audit.py — a point-in-time repo dump,
+# regenerate on demand, never commit.
+/repo_audit_packet.md
+
 # ==== Secrets / TLS material / SOAR runtime state (CDP §6, §12.3) ====
 .env
 scripts/setup/.env
 scripts/setup/certs/
 **/approval_queue.jsonl
+
+# ==== Security Onion migration ====
+# Read-only reference clone of Security-Onion-Solutions/securityonion
+# (pinned tag documented in docs/migration/README.md) — never commit.
+reference/
