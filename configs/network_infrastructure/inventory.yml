@@ -24,3 +24,10 @@ all:
         ansible_password: "{{ lookup('env', 'ANSIBLE_NET_PASSWORD') | default('cisco', true) }}"
         ansible_become: yes
         ansible_become_method: enable
+    ubuntu_servers:
+      hosts:
+        docker-host-01:
+          ansible_host: 192.168.20.10
+      vars:
+        ansible_user: "ubuntu"
+        ansible_become: yes

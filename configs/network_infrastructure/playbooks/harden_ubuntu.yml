@@ -1,0 +1,45 @@
+---
+- name: Apply CIS Benchmarks to Ubuntu Host Server
+  hosts: ubuntu_servers
+  gather_facts: true
+  tasks:
+    - name: Ensure UFW is installed
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+        update_cache: yes
+
+    - name: Set UFW default deny incoming, allow outgoing
+      community.general.ufw:
+        default: deny
+        direction: incoming
+
+    - name: Allow essential management and application ports (22, 5044, 5601, 5000)
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "22"
+        - "5044"
+        - "5601"
+        - "5000"
+
+    - name: Enable UFW and reload
+      community.general.ufw:
+        state: enabled
+
+    - name: CIS Benchmark - Ensure /etc/shadow permissions are 640 or more restrictive
+      ansible.builtin.file:
+        path: /etc/shadow
+        owner: root
+        group: shadow
+        mode: '0640'
+
+    - name: CIS Benchmark - Secure shared memory (/run/shm)
+      ansible.posix.mount:
+        path: /run/shm
+        src: tmpfs
+        fstype: tmpfs
+        opts: defaults,nodev,nosuid,noexec
+        state: present
