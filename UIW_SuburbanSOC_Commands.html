@@ -21,12 +21,13 @@ h2 { color: #CE1126; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
     <p>Following the recent security overhaul of the Suburban-SOC infrastructure, Elasticsearch authentication (X-Pack Security) has been strictly enforced. As a result, starting the ELK pipeline now requires passing a secure password via environment variables to ensure the container boot process seamlessly provisions credentials.</p>
 
     <h2>2. Starting the Secured ELK Stack</h2>
-    <p>Use the following command to start the pipeline. If you do not specify a password, it will default to <code>SuburbanSOC2026!</code>.</p>
+    <p>You must set a strong <code>ELASTIC_PASSWORD</code> (and the other required secrets) in your <code>.env</code> file before starting &mdash; the stack fails to boot if they are unset. There is no built-in default password.</p>
     <div class="code-block">
-        # Start ELK with the default secure password<br>
-        docker-compose up -d<br><br>
-        # OR Start ELK with a custom secure password<br>
-        ELASTIC_PASSWORD="YourCustomPassword!" docker-compose up -d
+        # 1. Copy the template and fill in strong, unique secrets<br>
+        cp scripts/setup/.env.example scripts/setup/.env<br>
+        # 2. Edit scripts/setup/.env and set ELASTIC_PASSWORD, KIBANA_PASSWORD, etc.<br><br>
+        # 3. Start the stack (reads secrets from .env)<br>
+        docker-compose up -d
     </div>
 
     <h2>3. Accessing Kibana</h2>
@@ -34,13 +35,14 @@ h2 { color: #CE1126; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
     <ul>
         <li><strong>URL:</strong> http://localhost:5601</li>
         <li><strong>Username:</strong> elastic</li>
-        <li><strong>Password:</strong> SuburbanSOC2026! (or the custom password you set)</li>
+        <li><strong>Password:</strong> the value of <code>ELASTIC_PASSWORD</code> from your <code>.env</code></li>
     </ul>
 
     <h2>4. CLI API Access</h2>
     <p>Any `curl` commands used for interacting with the Elasticsearch backend must now include the `-u` authentication flag.</p>
     <div class="code-block">
-        curl -u elastic:SuburbanSOC2026! http://localhost:9200/_cluster/health
+        # ES serves HTTPS with security enabled; pass the password from your .env<br>
+        curl -k -u "elastic:${ELASTIC_PASSWORD}" https://localhost:9200/_cluster/health
     </div>
 
     <h2>5. Pipeline Log Ingestion</h2>

@@ -100,7 +100,7 @@ configure_router_ip() {
 # Collects and exports Elasticsearch credentials for API health checks
 configure_elk_auth() {
     print_section "ELK Stack Authentication"
-    info "Elasticsearch 8.x requires credentials for API checks."
+    info "Elasticsearch 9.x (security ON, HTTPS) requires credentials for API checks."
     
     echo -ne "${YELLOW}  Enter Elasticsearch username [Press Enter for 'elastic']: ${NC}"
     read -r user_input
@@ -204,7 +204,7 @@ run_prereq_checks() {
 
     # Test Elasticsearch API connection using the provided credentials
     # Connect-timeout prevents hanging if the service is down
-    if curl -s -u "${ES_USER}:${ES_PASS}" --connect-timeout 3 http://localhost:9200/_cluster/health &>/dev/null; then
+    if curl -sk -u "${ES_USER}:${ES_PASS}" --connect-timeout 3 https://localhost:9200/_cluster/health &>/dev/null; then
         pass "Elasticsearch is reachable (port 9200)"
     else
         warn "Elasticsearch not reachable or auth failed - ensure ELK stack is running and password is correct."
@@ -347,7 +347,7 @@ run_sop_002() {
         [[ "$choice" =~ ^[Yy]$ ]] || return
     fi
 
-    info "Installing Filebeat 8.x via Elastic APT repository"
+    info "Installing Filebeat 9.x via Elastic APT repository"
     warn "Requires sudo"
     confirm || return
 
@@ -434,7 +434,7 @@ run_sop_005() {
 
     echo -e "\n${BOLD}Step 2: ELK Stack${NC}"
     # Wait for the user to manually start ELK if it isn't already responsive
-    if curl -s -u "${ES_USER}:${ES_PASS}" --connect-timeout 3 http://localhost:9200/_cluster/health &>/dev/null; then
+    if curl -sk -u "${ES_USER}:${ES_PASS}" --connect-timeout 3 https://localhost:9200/_cluster/health &>/dev/null; then
         pass "Elasticsearch already up"
     else
         warn "Elasticsearch not reachable. Start your ELK stack (docker compose up -d)"
@@ -444,7 +444,7 @@ run_sop_005() {
 
     echo -e "\n${BOLD}Step 3: Verify Elasticsearch${NC}"
     # Parse the specific 'status' field from the JSON health response
-    ES_STATUS=$(curl -s -u "${ES_USER}:${ES_PASS}" http://localhost:9200/_cluster/health | grep -o '"status":"[^"]*"' | head -1)
+    ES_STATUS=$(curl -sk -u "${ES_USER}:${ES_PASS}" https://localhost:9200/_cluster/health | grep -o '"status":"[^"]*"' | head -1)
     if [ -n "$ES_STATUS" ]; then
         pass "Elasticsearch: $ES_STATUS"
     else
