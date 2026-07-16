@@ -1,0 +1,12 @@
+logon_type,description,risk_level
+2,Interactive,Low
+3,Network,Medium
+4,Batch,Low
+5,Service,Low
+7,Unlock,Low
+8,NetworkCleartext,High
+9,NewCredentials,High
+10,RemoteInteractive,High
+11,CachedInteractive,Low
+12,CachedRemoteInteractive,Medium
+13,CachedUnlock,Low
